@@ -13,5 +13,5 @@ A decentralized video conferencing application.
   - The blockchain component that handles the decentralized aspects of the application.
 
 **Note:** We will keep updating this file as we make progress.  
-**Focus:** In this collaborative project for this sem, our main focus is on the smart contract part and the basic version of the application.
+**Focus:** In this collaborative project for this sem 7, our main focus is on the smart contract part and the basic version of the application.
 
