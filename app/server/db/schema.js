@@ -2,18 +2,18 @@ const mongoose=require("mongoose");
 
 const userSchema= mongoose.Schema({
    email:{
-     type:string,
+     type:String,
      required:true
    },
    passwordHash:{
-     type:string,
+     type:String,
      require:true
    }
 });
 
 const groupSchema=mongoose.Schema({
   email:{
-    type:string,
+    type:String,
     required:true
   }
   //I will add the rest things later
