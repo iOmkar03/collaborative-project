@@ -2,7 +2,7 @@ const express = require("express");
 const port = 5000;
 const cors=require("cors");
 const connectDB= require('./db/connections.js')
-
+const userRouter = require("./routes/users.js");
 
 const app = express();
 app.use(express.json());
@@ -18,6 +18,9 @@ async function startServer() {
       console.log("Reach");
       res.send("Welcome to BlockMeet server");
     });
+
+    //routes
+    app.use("/users", userRouter);
 
     
     app.listen(port, () => {
