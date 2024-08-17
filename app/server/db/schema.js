@@ -11,15 +11,20 @@ const userSchema= mongoose.Schema({
    }
 });
 
-const groupSchema=mongoose.Schema({
-  email:{
-    type:String,
-    required:true
-  }
+const conferenceSchema=mongoose.Schema({
+  //conference will have list of participants
+  
+  participants:[{
+    email:{
+      type:String,
+      required:true
+    }
+    
+  }]
   //I will add the rest things later
 })
 
 const User=mongoose.model("User",userSchema);
-const Group=mongoose.model("Group",groupSchema);
+const Conference=mongoose.model("Conference",conferenceSchema);
 
-module.exports={User,Group};
+module.exports={User,Conference};

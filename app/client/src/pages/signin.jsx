@@ -27,6 +27,7 @@ const Signin = () => {
 
       //store the token in local storage
       localStorage.setItem("token", signinres.data.token);
+      localStorage.setItem("email", email);
          navigate("/");
       //redirect to the dashboard page
     } catch (error) {
