@@ -1,12 +1,12 @@
 import React from "react";
 import Navbar from "../components/navbar";
-
+import Addjoin from "../components/addjoin";
 
 const dashboard = () => {
     return (
-        <div>
+        <div className="min-h-[80vh]">
             <Navbar/>
-            Dashboard
+            <Addjoin/>
         </div>
     )
 }
