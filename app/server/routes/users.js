@@ -102,4 +102,19 @@ router.post("/signin",async(req,res)=>{
 
 })
 
+   router.get("/check",async (req,res)=>{
+        const email=req.query.email;
+        console.log(email);
+
+        const exits = await User.findOne({email:email})
+            
+        if(exits){
+            res.status(200).json({message:"User exists"})
+        }else{
+            res.status(404).json({message:"User does not exist"})
+        }
+      
+      
+   })
+
 module.exports = router;
