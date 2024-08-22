@@ -16,10 +16,17 @@ router.post('/create',verifyUser,async (req,res)=>{
         const addedmeet=await newConference.save();
         const meetId=addedmeet._id.toString();
         //console.log(req.user);
-        const creator=await User.findOne({email:req.user});
-        //console.log(creator);
-        creator.conferences.push({conferenceId:meetId,timestamp:new Date()});
-        await creator.save();
+        
+        for(let participant of participants){
+            const creator=await User.findOne({email:participant});
+            //console.log(creator);
+            creator.conferences.push({
+              conferenceId:meetId,
+              conferenceName:name,
+              timestamp:new Date()
+            });
+            await creator.save();
+        }
         res.status(200).json(
           {
             message:"Meet Created",

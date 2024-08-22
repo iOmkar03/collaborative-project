@@ -38,9 +38,9 @@ const AddMeet = ({ onHandleAdd }) => {
                 }
               }
         );
-      console.log(createMeet);
+        alert("Meet Created");
     }catch(error){
-    
+        alert("Error in creating meet");
     }
     onHandleAdd();
   };
