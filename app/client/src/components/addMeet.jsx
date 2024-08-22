@@ -21,9 +21,27 @@ const AddMeet = ({ onHandleAdd }) => {
     }
   };
 
-  const HandleSubmit = (e) => {
+  const HandleSubmit = async (e) => {
     e.preventDefault();
-    alert("Meet added successfully");
+
+    try{
+      
+        const createMeet = await axios.post(
+          `${backend}/conference/create`, 
+              {
+                name: meetName,
+                participants: meetParticipants,
+              },
+              {
+                headers: {
+                token: localStorage.getItem("token"),
+                }
+              }
+        );
+      console.log(createMeet);
+    }catch(error){
+    
+    }
     onHandleAdd();
   };
 

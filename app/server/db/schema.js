@@ -5,21 +5,36 @@ const userSchema= mongoose.Schema({
      type:String,
      required:true
    },
+
+
    passwordHash:{
      type:String,
      require:true
-   }
+   },
+
+
+   conferences:[{
+     conferenceId:{
+       type:String,
+       required:true
+     },
+     timestamp:{
+       type:Date,
+       required:true
+     }
+   }]
 });
 
 const conferenceSchema=mongoose.Schema({
   //conference will have list of participants
-  
+  name:{
+    type:String,
+    required:true  
+  },
   participants:[{
-    email:{
-      type:String,
-      required:true
-    }
     
+      type:String,
+      required:true  
   }]
   //I will add the rest things later
 })
