@@ -16,10 +16,17 @@ router.post('/create',verifyUser,async (req,res)=>{
         const addedmeet=await newConference.save();
         const meetId=addedmeet._id.toString();
         //console.log(req.user);
-        const creator=await User.findOne({email:req.user});
-        //console.log(creator);
-        creator.conferences.push({conferenceId:meetId,timestamp:new Date()});
-        await creator.save();
+        
+        for(let participant of participants){
+            const creator=await User.findOne({email:participant});
+            //console.log(creator);
+            creator.conferences.push({
+              conferenceId:meetId,
+              conferenceName:name,
+              timestamp:new Date()
+            });
+            await creator.save();
+        }
         res.status(200).json(
           {
             message:"Meet Created",
@@ -29,6 +36,61 @@ router.post('/create',verifyUser,async (req,res)=>{
       console.log(error);
     }
 });
+
+router.get('/ofuser',verifyUser,async(req,res)=>{
+  try{
+    
+    const email=req.user;
+    //console.log(email);
+    const user=await User.findOne({email:email});  
+    //console.log(user);
+    const conferences=user.conferences;
+    //console.log(conferences);
+    res.status(200).json(
+      {
+        conferences:conferences
+      }
+    );
+  }catch(error){
+    console.log(error);
+  }
+})
+
+router.get('/access',verifyUser,async(req,res)=>{
+  try{
+    
+    const email=req.user;
+    const conferenceId=req.headers.conferenceid;
+    //console.log(email);
+    //console.log(conferenceId);
+    const conference= await Conference.findOne({_id:conferenceId});
+    //console.log(conference);
+    const participants=conference.participants;
+
+    if(participants.includes(email)){
+      res.status(200).json(
+        {
+          message:"Authorized"
+        }
+      );
+    }
+    else{
+      res.status(401).json(
+        {
+          message:"Unauthorized"
+        }
+      );
+    }
+    
+  }catch(error){
+    res.status(401).json(
+      {
+        message:"Unauthorized",
+        error:error
+      }
+    );
+  }
+})
 
 
 module.exports=router;

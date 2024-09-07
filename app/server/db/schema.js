@@ -18,6 +18,10 @@ const userSchema= mongoose.Schema({
        type:String,
        required:true
      },
+     conferenceName:{
+       type:String,
+       required:true
+     },
      timestamp:{
        type:Date,
        required:true
