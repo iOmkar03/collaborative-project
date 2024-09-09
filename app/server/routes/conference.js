@@ -66,11 +66,13 @@ router.get('/access',verifyUser,async(req,res)=>{
     const conference= await Conference.findOne({_id:conferenceId});
     //console.log(conference);
     const participants=conference.participants;
+    const size=participants.length;
 
     if(participants.includes(email)){
       res.status(200).json(
         {
-          message:"Authorized"
+          message:"Authorized",
+          size:size
         }
       );
     }
