@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -13,195 +12,238 @@ import { getUserMedia, attachStreamToVideoElement } from "../utils/mediaUtils";
 import { sendSignalingData } from "../utils/signalingUtils";
 
 const Conference = () => {
-  const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-  const [peerConnection, setPeerConnection] = useState(null);
-  const socket = useRef(null);
-  const { id: meetingId } = useParams();
   const navigate = useNavigate();
   const backend = "http://localhost:5000";
   const wsbackend = "ws://localhost:3001";
+  const conferenceId = useParams().id;
+  const socket = useRef(null);
   const [isSocketOpen, setIsSocketOpen] = useState(false);
-  const reconnectTimeoutRef = useRef(null);
-  const [meetSize, setMeetSize] = useState(2); // Default size, adjust as needed
-
-  const initializeWebSocket = () => {
-    if (socket.current && socket.current.readyState === WebSocket.OPEN) {
-      console.log("WebSocket is already open");
-      return;
-    }
-
-    console.log("Initializing WebSocket connection");
-
-    try {
-      socket.current = new WebSocket(wsbackend);
-
-      console.log("WebSocket object created");
-
-      socket.current.onopen = () => {
-        console.log("WebSocket connection opened successfully");
-        setIsSocketOpen(true);
-        socket.current.send(
-          JSON.stringify({
-            type: "join",
-            meetingId,
-            size: meetSize,
-          })
-        );
-      };
-
-      socket.current.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        console.log("Received WebSocket message:", data);
-
-        if (!peerConnection) {
-          console.warn("PeerConnection not initialized yet");
-          return;
-        }
-
-        try {
-          if (data.type === "offer") {
-            console.log("Processing offer");
-            await handleRemoteDescription(peerConnection, data.offer);
-            const answer = await createAnswer(peerConnection);
-            await peerConnection.setLocalDescription(answer);
-            sendSignalingData(socket.current, "answer", answer);
-          } else if (data.type === "answer") {
-            console.log("Processing answer");
-            await handleRemoteDescription(peerConnection, data.answer);
-          } else if (data.type === "candidate") {
-            console.log("Processing ICE candidate");
-            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-          }
-        } catch (error) {
-          console.error("Error processing WebSocket message:", error);
-        }
-      };
-
-      socket.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setIsSocketOpen(false);
-      };
-
-      socket.current.onclose = (event) => {
-        console.log("WebSocket connection closed", event);
-        setIsSocketOpen(false);
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log("Attempting to reconnect...");
-          initializeWebSocket();
-        }, 5000);
-      };
-
-      // Add a timeout to check if the connection is established
-      setTimeout(() => {
-        if (socket.current.readyState !== WebSocket.OPEN) {
-          console.log("WebSocket connection failed to open within 5 seconds");
-        }
-      }, 5000);
-
-    } catch (error) {
-      console.error("Error creating WebSocket:", error);
-    }
-  };
+  const [remoteStream, setRemoteStream] = useState(null);
+  const localVideoRef = useRef(null);
+  const [remoteVideoRef, setRemoteVideoRef] = useState(null); // Use state to trigger re-render
+  const peerConnection = useRef(null);
 
   useEffect(() => {
-    console.log("Starting WebSocket initialization");
-    initializeWebSocket();
-
-    return () => {
-      console.log("Cleaning up WebSocket connection");
-      if (socket.current) {
-        socket.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
+    securitycheck();
+    connectSocket();
   }, []);
 
   useEffect(() => {
-    const initializeConnection = async () => {
-      try {
-        console.log("Initializing media and peer connection");
-        const localStream = await getUserMedia({ video: true, audio: true });
-        attachStreamToVideoElement(localVideoRef.current, localStream);
-
-        const newPeerConnection = createPeerConnection(
-          { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
-          (candidate) => {
-            if (isSocketOpen && socket.current) {
-              sendSignalingData(socket.current, "candidate", candidate);
-            } else {
-              console.warn("WebSocket not open, can't send candidate");
-            }
-          },
-          (event) => {
-            console.log("Track received", event);
-            if (remoteVideoRef.current && event.streams && event.streams[0]) {
-              remoteVideoRef.current.srcObject = event.streams[0];
-            }
-          }
-        );
-
-        newPeerConnection.oniceconnectionstatechange = () => {
-          console.log("ICE connection state:", newPeerConnection.iceConnectionState);
-        };
-
-        newPeerConnection.onsignalingstatechange = () => {
-          console.log("Signaling state:", newPeerConnection.signalingState);
-        };
-
-        addLocalTracks(newPeerConnection, localStream);
-        setPeerConnection(newPeerConnection);
-
-        // Create and send offer
-        const offer = await createOffer(newPeerConnection);
-        await newPeerConnection.setLocalDescription(offer);
-        if (isSocketOpen && socket.current) {
-          sendSignalingData(socket.current, "offer", offer);
-          console.log("Offer created and sent");
-        }
-
-        console.log("Peer connection initialized");
-      } catch (error) {
-        console.error("Error initializing connection:", error);
-      }
-    };
-
     if (isSocketOpen) {
-      initializeConnection();
+      getlocalStream();
     }
   }, [isSocketOpen]);
 
-  const securityCheck = async () => {
+  useEffect(() => {
+    // Ensure the video element is updated with the remote stream
+    if (remoteStream && remoteVideoRef) {
+      attachStreamToVideoElement(remoteVideoRef, remoteStream);
+    }
+  }, [remoteStream, remoteVideoRef]);
+
+  const securitycheck = async () => {
     try {
       const check = await axios.get(`${backend}/conference/access`, {
         headers: {
           token: localStorage.getItem("token"),
-          conferenceId: meetingId,
+          conferenceId: conferenceId,
         },
       });
-
-      const size = check.data.size;
-      setMeetSize(size);
     } catch (error) {
-      console.error("Authorization error:", error);
       alert("You are not authorized to view this conference");
       navigate("/");
     }
   };
 
+  const connectSocket = () => {
+    if (socket.current) {
+      if (
+        socket.current.readyState === WebSocket.CONNECTING ||
+        socket.current.readyState === WebSocket.OPEN
+      ) {
+        console.log("Using the existing socket");
+        return;
+      }
+    }
+
+    try {
+      socket.current = new WebSocket(wsbackend);
+      console.log("New socket created");
+
+      socket.current.onopen = () => {
+        console.log("WebSocket connection established");
+        setIsSocketOpen(true);
+        const messages = {
+          type: "join",
+          conferenceId,
+        };
+        sendSignal(messages);
+      };
+
+      socket.current.onclose = () => {
+        console.log("WebSocket connection closed, attempting to reconnect...");
+        peerConnection.current.close();
+        setIsSocketOpen(false);
+        setTimeout(connectSocket, 5000);
+      };
+
+      socket.current.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setIsSocketOpen(false);
+        setTimeout(connectSocket, 5000);
+      };
+
+      socket.current.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+
+        switch (data.type) {
+          case "sp-joined":
+            handlePeerConnection();
+            createOfferAndSend();
+            break;
+          case "offer":
+            handleRemoteOffer(data.offer);
+            console.log("Received remote offer");
+            break;
+          case "answer":
+            handleRemoteAnswer(data.answer);
+            console.log("Received remote answer");
+            break;
+          case "candidate":
+            handleNewICECandidate(data.candidate);
+            console.log("Received new ICE candidate");
+            break;
+          default:
+            break;
+        }
+      };
+    } catch (error) {
+      console.error("Failed to connect to the WebSocket server:", error);
+      setTimeout(connectSocket, 5000);
+    }
+  };
+
+  const handlePeerConnection = () => {
+    if (
+      !peerConnection.current ||
+      peerConnection.current.connectionState === "closed"
+    ) {
+      console.log("Creating a new RTCPeerConnection");
+      peerConnection.current = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun.l.google.com:5349" },
+          // Add additional STUN/TURN servers if needed
+        ],
+      });
+
+      peerConnection.current.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log("ICE candidate gathered:", event.candidate);
+          sendSignal({
+            type: "candidate",
+            conferenceId: conferenceId,
+            candidate: event.candidate,
+          });
+        } else {
+          console.log("All ICE candidates have been sent");
+        }
+      };
+
+      peerConnection.current.ontrack = (event) => {
+        console.log("Received remote track");
+        setRemoteStream(event.streams[0]);
+      };
+    }
+  };
+
+  const createOfferAndSend = async () => {
+    try {
+      const offer = await peerConnection.current.createOffer();
+      await peerConnection.current.setLocalDescription(offer);
+      console.log("Sending offer:", offer);
+      sendSignal({
+        type: "offer",
+        conferenceId: conferenceId,
+        offer: offer,
+      });
+    } catch (error) {
+      console.error("Error creating offer:", error);
+    }
+  };
+  const handleRemoteOffer = async (offer) => {
+    if (
+      !peerConnection.current ||
+      peerConnection.current.connectionState === "closed"
+    ) {
+      handlePeerConnection();
+    }
+
+    try {
+      await peerConnection.current.setRemoteDescription(
+        new RTCSessionDescription(offer),
+      );
+      const answer = await peerConnection.current.createAnswer();
+      await peerConnection.current.setLocalDescription(answer);
+      sendSignal({
+        type: "answer",
+        conferenceId: conferenceId,
+        answer: answer,
+      });
+    } catch (error) {
+      console.error("Error handling remote offer:", error);
+    }
+  };
+
+  const handleRemoteAnswer = async (answer) => {
+    try {
+      await peerConnection.current.setRemoteDescription(answer);
+    } catch (error) {
+      console.error("Error setting remote description:", error);
+    }
+  };
+
+  const handleNewICECandidate = async (candidate) => {
+    console.log("Received new ICE candidate", candidate);
+    try {
+      await peerConnection.current.addIceCandidate(candidate);
+      console.log("ICE candidate added successfully");
+    } catch (error) {
+      console.error("Error adding new ICE candidate:", error);
+    }
+  };
+
+  const sendSignal = (message) => {
+    socket.current.send(JSON.stringify(message));
+  };
+
+  const getlocalStream = async () => {
+    try {
+      const localStream = await getUserMedia({ video: true, audio: true });
+      attachStreamToVideoElement(localVideoRef.current, localStream);
+      if (peerConnection.current) {
+        addLocalTracks(peerConnection.current, localStream);
+        console.log("Local stream added to peer connection");
+        // Only after local tracks are added, create the offer
+        createOfferAndSend();
+      }
+    } catch (error) {
+      console.error("Failed to get local stream:", error);
+    }
+  };
   return (
     <div>
-      <h1>Conference {meetingId}</h1>
+      <h1>Conference {conferenceId}</h1>
       <div>
-        <video ref={localVideoRef} autoPlay muted playsInline />
-        <video ref={remoteVideoRef} autoPlay playsInline />
+        <video ref={localVideoRef} autoPlay playsInline />
+        <video
+          ref={(ref) => setRemoteVideoRef(ref)} // Use callback ref to trigger state update
+          autoPlay
+          playsInline
+        />
       </div>
     </div>
   );
 };
 
 export default Conference;
-
