@@ -1,3 +1,4 @@
 
 app/server/node_modules/
 app/server/.env
+app/ws_server/node_modules/
