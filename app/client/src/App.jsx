@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Signin from "./pages/Signin";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/dashboard";
-import Conference from "./pages/conference2";
+import Conference from "./pages/conference3";
 
 const App = () => {
   return (
