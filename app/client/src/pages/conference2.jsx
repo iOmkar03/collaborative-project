@@ -24,11 +24,8 @@ const Conference = () => {
   const peerConnection = useRef(null);
   const [remoteAudioTrack, setRemoteAudioTrack] = useState(null);
   const [remoteVideoTrack, setRemoteVideoTrack] = useState(null);
-
   let originalMLineOrder = [];
   const hasRefreshed = useRef(false); // Track if the page has already been refreshed
-
-  //useeffect which refresh a new page 5 sec after it is loaded
 
   useEffect(() => {
     securitycheck();
@@ -116,7 +113,7 @@ const Conference = () => {
             handlePeerConnection();
             createOfferAndSend();
             //setTimeout(handleNewJoin, 5000);
-           
+
             break;
           case "offer":
             handleRemoteOffer(data.offer);
