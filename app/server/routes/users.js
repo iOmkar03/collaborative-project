@@ -21,9 +21,9 @@ const signupSchema = zod.object({
 });
 
 const signinSchema = zod.object({
-    email:zod.string().email(),
-    password:zod.string().min(4).max(50)
-})
+  email: zod.string().email(),
+  password: zod.string().min(4).max(50)
+});
 
 //signup route
 
@@ -40,7 +40,7 @@ router.post("/signup", async (req, res) => {
 
   // Check if the user already exists
   const existingUser = await User.findOne({ email: email });
-  
+
   if (existingUser) {
     console.log("User already exists");
     return res.status(400).json({ error: "User already exists" });
@@ -67,54 +67,54 @@ router.post("/signup", async (req, res) => {
 
 //signin route
 
-router.post("/signin",async(req,res)=>{
+router.post("/signin", async (req, res) => {
 
-    const {email,password}=req.body;
-    const validatedData=signinSchema.parse(req.body);
-    if(validatedData){
-        try {
+  const { email, password } = req.body;
+  const validatedData = signinSchema.parse(req.body);
+  if (validatedData) {
+    try {
 
-            //check if the user exists
-            const user=await User.findOne({email:email});
-            if(!user){
-                return res.status(400).json({error:"User does not exist"});
-            }
+      //check if the user exists
+      const user = await User.findOne({ email: email });
+      if (!user) {
+        return res.status(400).json({ error: "User does not exist" });
+      }
 
-            //check if the password is correct
-            const isPasswordCorrect=bcrypt.compareSync(password,user.passwordHash);
-            if(!isPasswordCorrect){
-                return res.status(400).json({error:"Password is incorrect"});
-            }
+      //check if the password is correct
+      const isPasswordCorrect = bcrypt.compareSync(password, user.passwordHash);
+      if (!isPasswordCorrect) {
+        return res.status(400).json({ error: "Password is incorrect" });
+      }
 
-            //sign the token
-            const token=jwt.sign({id:user._id,email:email},JWT_SECRET);
-            res.json({token:token});
-            
-            
-        } catch (error) {
-            res.status(500).json({error:"Internal server error"});
-            
-        }
-    }else{
-        res.status(400).json({error:"Invalid data"});
+      //sign the token
+      const token = jwt.sign({ id: user._id, email: email }, JWT_SECRET);
+      res.json({ token: token });
+
+
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+
     }
+  } else {
+    res.status(400).json({ error: "Invalid data" });
+  }
 
 
-})
+});
 
-   router.get("/check",async (req,res)=>{
-        const email=req.query.email;
-        console.log(email);
+router.get("/check", async (req, res) => {
+  const email = req.query.email;
+  console.log(email);
 
-        const exits = await User.findOne({email:email})
-            
-        if(exits){
-            res.status(200).json({message:"User exists"})
-        }else{
-            res.status(404).json({message:"User does not exist"})
-        }
-      
-      
-   })
+  const exits = await User.findOne({ email: email });
+
+  if (exits) {
+    res.status(200).json({ message: "User exists" });
+  } else {
+    res.status(404).json({ message: "User does not exist" });
+  }
+
+
+});
 
 module.exports = router;
