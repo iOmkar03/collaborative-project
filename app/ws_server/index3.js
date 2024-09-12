@@ -74,7 +74,7 @@ wss.on("connection", (ws) => {
               //console.log(`Forwarded ${data.type} message to client`);
             } catch (error) {
               console.error(
-               `Error sending ${data.type} message to client:`,
+                `Error sending ${data.type} message to client:`,
                 error,
               );
             }

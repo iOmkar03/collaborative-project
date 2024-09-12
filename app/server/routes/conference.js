@@ -72,7 +72,8 @@ router.get('/access',verifyUser,async(req,res)=>{
       res.status(200).json(
         {
           message:"Authorized",
-          size:size
+          size:size,
+          email:email
         }
       );
     }
