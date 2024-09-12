@@ -20,8 +20,15 @@ const Conference = () => {
   const [isSocketOpen, setIsSocketOpen] = useState(false);
   const [remoteStream, setRemoteStream] = useState(null);
   const localVideoRef = useRef(null);
-  const [remoteVideoRef, setRemoteVideoRef] = useState(null); // Use state to trigger re-render
+  const remoteVideoRef = useRef(null);
   const peerConnection = useRef(null);
+  const [remoteAudioTrack, setRemoteAudioTrack] = useState(null);
+  const [remoteVideoTrack, setRemoteVideoTrack] = useState(null);
+
+  let originalMLineOrder = [];
+  const hasRefreshed = useRef(false); // Track if the page has already been refreshed
+
+  //useeffect which refresh a new page 5 sec after it is loaded
 
   useEffect(() => {
     securitycheck();
@@ -31,6 +38,7 @@ const Conference = () => {
   useEffect(() => {
     if (isSocketOpen) {
       getlocalStream();
+      brute();
     }
   }, [isSocketOpen]);
 
@@ -54,7 +62,14 @@ const Conference = () => {
       navigate("/");
     }
   };
-
+  const handleNewJoin = () => {
+    // Refresh only once when a new participant joins
+    if (!hasRefreshed.current) {
+      console.log("New participant joined, refreshing page once...");
+      hasRefreshed.current = true; // Mark as refreshed
+      window.location.reload(); // Trigger hard refresh
+    }
+  };
   const connectSocket = () => {
     if (socket.current) {
       if (
@@ -100,6 +115,8 @@ const Conference = () => {
           case "sp-joined":
             handlePeerConnection();
             createOfferAndSend();
+            //setTimeout(handleNewJoin, 5000);
+           
             break;
           case "offer":
             handleRemoteOffer(data.offer);
@@ -152,14 +169,44 @@ const Conference = () => {
 
       peerConnection.current.ontrack = (event) => {
         console.log("Received remote track");
-        setRemoteStream(event.streams[0]);
+        attachStreamToVideoElement(remoteVideoRef.current, event.streams[0]);
+      };
+
+      peerConnection.current.onnegotiationneeded = async () => {
+        try {
+          // Only create an offer if signaling state is 'stable'
+          if (peerConnection.current.signalingState === "stable") {
+            await createOfferAndSend();
+          } else {
+            console.log("Negotiation needed but signaling state is not stable");
+          }
+        } catch (error) {
+          console.error("Error during renegotiation:", error);
+        }
       };
     }
   };
 
+  // Function to parse the m-line order from an SDP
+
   const createOfferAndSend = async () => {
     try {
-      const offer = await peerConnection.current.createOffer();
+      const offerOptions = {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      };
+
+      // Only proceed if the signaling state is 'have-local-offer' or 'have-remote-offer'
+      if (peerConnection.current.signalingState !== "stable") {
+        console.log("Signaling state is not stable, skipping offer creation");
+        return;
+      }
+
+      const offer = await peerConnection.current.createOffer(offerOptions);
+
+      // Ensure audio comes before video in the SDP
+      offer.sdp = ensureAudioBeforeVideo(offer.sdp);
+
       await peerConnection.current.setLocalDescription(offer);
       console.log("Sending offer:", offer);
       sendSignal({
@@ -171,6 +218,21 @@ const Conference = () => {
       console.error("Error creating offer:", error);
     }
   };
+
+  const ensureAudioBeforeVideo = (sdp) => {
+    const sdpLines = sdp.split("\r\n");
+    const audioIndex = sdpLines.findIndex((line) => line.startsWith("m=audio"));
+    const videoIndex = sdpLines.findIndex((line) => line.startsWith("m=video"));
+
+    if (audioIndex !== -1 && videoIndex !== -1 && videoIndex < audioIndex) {
+      // Swap audio and video sections
+      const audioSection = sdpLines.splice(audioIndex, videoIndex - audioIndex);
+      sdpLines.splice(videoIndex, 0, ...audioSection);
+    }
+
+    return sdpLines.join("\r\n");
+  };
+
   const handleRemoteOffer = async (offer) => {
     if (
       !peerConnection.current ||
@@ -180,16 +242,53 @@ const Conference = () => {
     }
 
     try {
-      await peerConnection.current.setRemoteDescription(
-        new RTCSessionDescription(offer),
-      );
-      const answer = await peerConnection.current.createAnswer();
-      await peerConnection.current.setLocalDescription(answer);
-      sendSignal({
-        type: "answer",
-        conferenceId: conferenceId,
-        answer: answer,
-      });
+      // Ensure SDP order
+      offer.sdp = ensureAudioBeforeVideo(offer.sdp);
+
+      // Handle signaling state
+      console.log("Signaling state:", peerConnection.current.signalingState);
+      if (peerConnection.current.signalingState === "stable") {
+        // Directly set the remote description if signaling state is stable
+        console.log("Setting remote description directly");
+        await peerConnection.current.setRemoteDescription(
+          new RTCSessionDescription(offer),
+        );
+        console.log("Remote description set successfully");
+
+        // Create and set local answer
+        const answer = await peerConnection.current.createAnswer();
+        answer.sdp = ensureAudioBeforeVideo(answer.sdp);
+        await peerConnection.current.setLocalDescription(answer);
+
+        sendSignal({
+          type: "answer",
+          conferenceId: conferenceId,
+          answer: answer,
+        });
+        //console.log("test");
+        //refresh the page
+        //window.location.reload();
+      } else {
+        // Rollback and retry if the signaling state is not stable
+        console.log("Signaling state is not stable. Rolling back...");
+        await Promise.all([
+          peerConnection.current.setLocalDescription({ type: "rollback" }),
+          peerConnection.current.setRemoteDescription(
+            new RTCSessionDescription(offer),
+          ),
+        ]);
+        console.log("Retrying with new offer...");
+
+        const answer = await peerConnection.current.createAnswer();
+        answer.sdp = ensureAudioBeforeVideo(answer.sdp);
+        await peerConnection.current.setLocalDescription(answer);
+
+        sendSignal({
+          type: "answer",
+          conferenceId: conferenceId,
+          answer: answer,
+        });
+      }
     } catch (error) {
       console.error("Error handling remote offer:", error);
     }
@@ -197,12 +296,20 @@ const Conference = () => {
 
   const handleRemoteAnswer = async (answer) => {
     try {
-      await peerConnection.current.setRemoteDescription(answer);
+      if (peerConnection.current.signalingState === "have-local-offer") {
+        await peerConnection.current.setRemoteDescription(
+          new RTCSessionDescription(answer),
+        );
+      } else {
+        console.warn(
+          "Received answer in unexpected state:",
+          peerConnection.current.signalingState,
+        );
+      }
     } catch (error) {
       console.error("Error setting remote description:", error);
     }
   };
-
   const handleNewICECandidate = async (candidate) => {
     console.log("Received new ICE candidate", candidate);
     try {
@@ -217,15 +324,22 @@ const Conference = () => {
     socket.current.send(JSON.stringify(message));
   };
 
+  const brute = () => {
+    handlePeerConnection();
+    createOfferAndSend();
+    console.log("brute fired");
+  };
+
   const getlocalStream = async () => {
     try {
-      const localStream = await getUserMedia({ video: true, audio: true });
+      const constraints = { audio: true, video: true };
+      const localStream = await getUserMedia(constraints);
       attachStreamToVideoElement(localVideoRef.current, localStream);
       if (peerConnection.current) {
         addLocalTracks(peerConnection.current, localStream);
         console.log("Local stream added to peer connection");
-        // Only after local tracks are added, create the offer
-        createOfferAndSend();
+        // Remove this line:
+        // createOfferAndSend();
       }
     } catch (error) {
       console.error("Failed to get local stream:", error);
@@ -236,11 +350,7 @@ const Conference = () => {
       <h1>Conference {conferenceId}</h1>
       <div>
         <video ref={localVideoRef} autoPlay playsInline />
-        <video
-          ref={(ref) => setRemoteVideoRef(ref)} // Use callback ref to trigger state update
-          autoPlay
-          playsInline
-        />
+        <video ref={remoteVideoRef} autoPlay playsInline />
       </div>
     </div>
   );
