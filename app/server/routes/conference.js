@@ -1,8 +1,8 @@
-const express=require('express');
-const router=express.Router();
-const {verifyUser}=require("../middleware/auth.js");
-const {Conference}=require("../db/schema.js");
-const {User}=require("../db/schema.js");
+const express = require('express');
+const router = express.Router();
+const { verifyUser } = require("../middleware/auth.js");
+const { Conference } = require("../db/schema.js");
+const { User } = require("../db/schema.js");
 
 router.post('/create',verifyUser,async (req,res)=>{
     try {
