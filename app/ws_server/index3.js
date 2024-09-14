@@ -1,26 +1,53 @@
+const https = require("https");
+const fs = require("fs");
 const WebSocket = require("ws");
-const http = require("http");
 const express = require("express");
 const cors = require("cors");
 
+// Read certificate and key files
+const privateKey = fs.readFileSync(
+  "E:/MERN/Projests/FInlaYearProject/server.key",
+  "utf8",
+);
+const certificate = fs.readFileSync(
+  "E:/MERN/Projests/FInlaYearProject/server.cert",
+  "utf8",
+);
+
+const credentials = { key: privateKey, cert: certificate };
+
+// Create an Express app
 const app = express();
-app.use(cors()); // Configure CORS before defining any routes
+app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
+// Create an HTTPS server using the credentials
+const server = https.createServer(credentials, app);
+
+// Attach WebSocket server to the HTTPS server
 const wss = new WebSocket.Server({ server });
 
 // In-memory storage for meetings
 const meetings = {};
 
+// WebSocket connection handler
 wss.on("connection", (ws) => {
   ws.on("message", (message) => {
     const data = JSON.parse(message);
-    console.log("Received:", data);
+    //console.log("Received:", data);
 
     switch (data.type) {
       case "join":
         handleJoin(ws, data);
+        break;
+      case "offer":
+        handleOffer(ws, data);
+        break;
+      case "answer":
+        handleAnswer(ws, data);
+        break;
+      case "icecandidate":
+        handleIceCandidate(ws, data);
         break;
       default:
         break;
@@ -32,20 +59,27 @@ wss.on("connection", (ws) => {
   });
 });
 
+// Define a basic route for testing the Express server
+app.get("/", (req, res) => {
+  res.send("Welcome to the Secure BlockMeet server!");
+});
+
+// Start the HTTPS and WebSocket servers
 const port = process.env.PORT || 3001;
-server.listen(port, () => {
-  console.log(`WebSocket server is listening on port ${port}`);
+server.listen(port, "0.0.0.0", () => {
+  console.log(`Secure WebSocket server is listening on port ${port}`);
 });
 
 function handleJoin(ws, data) {
-  console.log("Joining:", data);
+  //console.log("Joining:", data);
   const { conferenceId, email, size } = data;
 
   // Initialize the meeting if it doesn't exist
   if (!meetings[conferenceId]) {
     meetings[conferenceId] = {
       size: size,
-      sp_count: Math.ceil(size / 3), // 1 super-peer per 3 participants
+      sp_count: Math.ceil(size / 3), // 1 super-peer per 3 participants,
+      conferenceId: conferenceId,
       sp: [
         {
           email: email,
@@ -62,6 +96,7 @@ function handleJoin(ws, data) {
         type: "joined",
         conferenceId,
         role: "sp",
+        from: email,
       }),
     );
   } else {
@@ -91,7 +126,7 @@ function handleJoin(ws, data) {
           type: "joined",
           conferenceId,
           role: "sp",
-          email: email,
+          from: email,
         }),
       );
 
@@ -100,9 +135,8 @@ function handleJoin(ws, data) {
           type: "joined",
           conferenceId,
           role: "sp",
-          email:
-            meetings[conferenceId].sp[meetings[conferenceId].sp.length - 1]
-              .email,
+          from: meetings[conferenceId].sp[meetings[conferenceId].sp.length - 1]
+            .email,
           position: "next",
         }),
       );
@@ -132,6 +166,8 @@ function handleJoin(ws, data) {
               conferenceId,
               role: "np",
               assignedTo: sp.email,
+              postion: "self",
+              from: email,
             }),
           );
 
@@ -140,7 +176,7 @@ function handleJoin(ws, data) {
               type: "joined",
               conferenceId,
               role: "sp",
-              email: email,
+              from: email,
               position: "child",
             }),
           );
@@ -157,11 +193,18 @@ function handleJoin(ws, data) {
     }
   }
 
-  console.log(meetings);
+  //display entire meeting object
+  //sp in sp make sure dont neet to displsy the content of ws 
+
+
+  console.log("sp", meetings[conferenceId].sp);
+  console.log("np", meetings[conferenceId].np);
+
+  //
 }
 
 function handleClose(ws) {
-  console.log("Closing:", ws);
+  //console.log("Closing:", ws);
 
   //find the meeting the user is in
   let meeting = Object.values(meetings).find((meeting) => {
@@ -225,7 +268,7 @@ function handleClose(ws) {
               type: "joined",
               conferenceId: meeting.conferenceId,
               role: "sp",
-              email: newsp.email,
+              from: newsp.email,
               position: "self",
             }),
           );
@@ -235,7 +278,7 @@ function handleClose(ws) {
               type: "joined",
               conferenceId: meeting.conferenceId,
               role: "sp",
-              email: newsp.email,
+              from: newsp.email,
               position: "prev",
             }),
           );
@@ -246,7 +289,7 @@ function handleClose(ws) {
             type: "joined",
             conferenceId: meeting.conferenceId,
             role: "sp",
-            email: newsp.email,
+            from: newsp.email,
             position: "next",
           }),
         );
@@ -258,7 +301,7 @@ function handleClose(ws) {
             type: "joined",
             conferenceId: meeting.conferenceId,
             role: "sp",
-            email: newsp.email,
+            from: newsp.email,
             position: "next",
           }),
         );
@@ -267,7 +310,7 @@ function handleClose(ws) {
             type: "joined",
             conferenceId: meeting.conferenceId,
             role: "sp",
-            email: newsp.email,
+            from: newsp.email,
             position: "prev",
           }),
         );
@@ -296,3 +339,117 @@ function handleClose(ws) {
 
   console.log("meetings", meetings);
 } // Close if (sp.np.length > 0) block
+
+function handleOffer(ws, data) {
+  //console.log("offer:", data);
+  const { conferenceId, to, from, offer } = data;
+
+  // Find the WebSocket connection for the recipient
+  // and send the offer message
+
+  let meeting = Object.values(meetings).find(
+    (meeting) =>
+      meeting.sp.some((sp) => sp.email === to) ||
+      meeting.np.some((np) => np.email === to),
+  );
+
+  if (!meeting) {
+    console.log("Meeting not found for user");
+    return;
+  }
+
+  let recipient = meeting.sp.find((sp) => sp.email === to);
+
+  if (!recipient) {
+    recipient = meeting.np.find((np) => np.email === to);
+  }
+
+  if (!recipient) {
+    console.log("Recipient not found");
+    return;
+  }
+
+  recipient.ws.send(
+    JSON.stringify({
+      type: "offer",
+      conferenceId,
+      from,
+      offer,
+    }),
+  );
+
+  console.log("Offer sent to:", recipient.email, "from", from);
+}
+
+function handleAnswer(ws, data) {
+  //console.log("answer:", data);
+  const { conferenceId, to, from, answer } = data;
+
+  // Find the WebSocket connection for the recipient
+  // and send the answer message
+
+  let meeting = Object.values(meetings).find(
+    (meeting) =>
+      meeting.sp.some((sp) => sp.email === to) ||
+      meeting.np.some((np) => np.email === to),
+  );
+
+  if (!meeting) {
+    console.log("Meeting not found for user");
+    return;
+  }
+
+  let recipient = meeting.sp.find((sp) => sp.email === to);
+
+  if (!recipient) {
+    recipient = meeting.np.find((np) => np.email === to);
+  }
+
+  if (!recipient) {
+    console.log("Recipient not found");
+    return;
+  }
+
+  recipient.ws.send(
+    JSON.stringify({
+      type: "answer",
+      conferenceId,
+      from,
+      answer,
+    }),
+  );
+
+  console.log("Answer sent to:", recipient.email, "from", from);
+}
+
+function handleIceCandidate(ws, data) {
+  //console.log("ICE candidate:", data);
+  const { conferenceId, to, from, candidate } = data;
+
+  let meeting = meetings[conferenceId];
+  if (!meeting) {
+    console.log("Meeting not found");
+    return;
+  }
+
+  let recipient = meeting.sp.find((sp) => sp.email === to);
+  if (!recipient) {
+    recipient = meeting.np.find((np) => np.email === to);
+  }
+
+  if (!recipient) {
+    console.log("Recipient not found");
+    return;
+  }
+
+  recipient.ws.send(
+    JSON.stringify({
+      type: "icecandidate",
+      conferenceId,
+      from,
+      candidate,
+    }),
+  );
+
+  console.log("ICE candidate sent to:", recipient.email, "from", from);
+}

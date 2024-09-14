@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const Signin = () => {
-  const backend = "http://localhost:5000";
+  const backend = "https://192.168.29.232:5000";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
@@ -28,7 +28,7 @@ const Signin = () => {
       //store the token in local storage
       localStorage.setItem("token", signinres.data.token);
       localStorage.setItem("email", email);
-         navigate("/");
+      navigate("/");
       //redirect to the dashboard page
     } catch (error) {
       console.error("Error:", error);
@@ -73,7 +73,7 @@ const Signin = () => {
           Signup
         </span>
       </p>
-      </div>
+    </div>
   );
 };
 
