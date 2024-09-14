@@ -1,51 +1,43 @@
-import React, { useEffect, useState, useRef } from "react";
+import react from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import {
-  createPeerConnection,
-  addLocalTracks,
-  handleRemoteDescription,
-  createOffer,
-  createAnswer,
-} from "../utils/webrtcUtils";
-import { getUserMedia, attachStreamToVideoElement } from "../utils/mediaUtils";
-import { sendSignalingData } from "../utils/signalingUtils";
 
 const Conference = () => {
+  const backend = "https://192.168.29.232:5000";
+  const wsbackend = "https://192.168.29.232:3001";
   const navigate = useNavigate();
-  const backend = "http://localhost:5000";
-  const wsbackend = "ws://localhost:3001";
-  const conferenceId = useParams().id;
+  const { conferenceId } = useParams();
+  const [conferenceSize, setConferenceSize] = useState(0);
+  const [email, setEmail] = useState("");
   const socket = useRef(null);
   const [isSocketOpen, setIsSocketOpen] = useState(false);
-  const [remoteStream, setRemoteStream] = useState(null);
+
+  //local sream
+  const [localaudio, setLocalAudio] = useState(true);
+  const [localvideo, setLocalVideo] = useState(true);
+  const localStream = useRef(null);
   const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-  const peerConnection = useRef(null);
-  const [remoteAudioTrack, setRemoteAudioTrack] = useState(null);
-  const [remoteVideoTrack, setRemoteVideoTrack] = useState(null);
-  let originalMLineOrder = [];
-  const hasRefreshed = useRef(false); // Track if the page has already been refreshed
-  const [email, setEmail] = useState("");
+
+  //remotes streams
+
+  const [remoteStreams, setRemoteStreams] = useState({});
+
+  const peerConnections = useRef({});
 
   useEffect(() => {
     securitycheck();
-    if (email) connectSocket();
+    if (email) {
+      connectSocket();
+    }
+    return () => {
+      // Cleanup function
+      if (localStream.current) {
+        localStream.current.getTracks().forEach((track) => track.stop());
+      }
+      Object.values(peerConnections.current).forEach((pc) => pc.close());
+    };
   }, [email]);
-
-  useEffect(() => {
-    if (isSocketOpen) {
-      getlocalStream();
-      brute();
-    }
-  }, [isSocketOpen]);
-
-  useEffect(() => {
-    // Ensure the video element is updated with the remote stream
-    if (remoteStream && remoteVideoRef) {
-      attachStreamToVideoElement(remoteVideoRef, remoteStream);
-    }
-  }, [remoteStream, remoteVideoRef]);
 
   const securitycheck = async () => {
     try {
@@ -55,14 +47,15 @@ const Conference = () => {
           conferenceId: conferenceId,
         },
       });
-      //console.log("security check:",check.data.email);
       setEmail(check.data.email);
-      //console.log("localuser",localuser);
+      setConferenceSize(check.data.size);
     } catch (error) {
+      console.log("security check error:", error);
       alert("You are not authorized to view this conference");
       navigate("/");
     }
   };
+
   const connectSocket = () => {
     if (socket.current) {
       if (
@@ -85,13 +78,13 @@ const Conference = () => {
           type: "join",
           conferenceId,
           email: email,
+          size: conferenceSize,
         };
-        sendSignal(messages);
+        sendWsSignal(messages);
       };
 
       socket.current.onclose = () => {
         console.log("WebSocket connection closed, attempting to reconnect...");
-        peerConnection.current.close();
         setIsSocketOpen(false);
         setTimeout(connectSocket, 5000);
       };
@@ -104,30 +97,26 @@ const Conference = () => {
 
       socket.current.onmessage = (message) => {
         const data = JSON.parse(message.data);
+        //console.log("Received message:", data);
 
         switch (data.type) {
-          case "sp-joined":
-            handlePeerConnection();
-            createOfferAndSend();
-
+          case "joined":
+            console.log("Joined the conference as:", data);
+            hadleJoined(data);
+            if (data.from !== email) {
+              createPeerConnection(data);
+              createOffer(data);
+            }
             break;
           case "offer":
-            handleRemoteOffer(data.offer);
-            console.log("Received remote offer");
+            handleOffer(data);
             break;
           case "answer":
-            handleRemoteAnswer(data.answer);
-            console.log("Received remote answer");
+            handleAnswer(data);
             break;
-          case "candidate":
-            handleNewICECandidate(data.candidate);
-            console.log("Received new ICE candidate");
+          case "icecandidate":
+            handleIceCandidate(data);
             break;
-          case "sp-left":
-            console.log("Super-peer left the meeting");
-            remoteVideoRef.current.srcObject = null;
-          //peerConnection.current.close();
-          //peerConnection.current = null;
           default:
             break;
         }
@@ -138,263 +127,178 @@ const Conference = () => {
     }
   };
 
-  const handlePeerConnection = () => {
-    if (
-      !peerConnection.current ||
-      peerConnection.current.connectionState === "closed"
-    ) {
-      console.log("Creating a new RTCPeerConnection");
-      peerConnection.current = new RTCPeerConnection({
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun.l.google.com:5349" },
-          // Add additional STUN/TURN servers if needed
-        ],
-      });
-
-      peerConnection.current.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log("ICE candidate gathered:", event.candidate);
-          sendSignal({
-            type: "candidate",
-            conferenceId: conferenceId,
-            candidate: event.candidate,
-          });
-        } else {
-          console.log("All ICE candidates have been sent");
-        }
-      };
-
-      peerConnection.current.ontrack = (event) => {
-        console.log("Received remote track");
-        const [remoteStream] = event.streams;
-        attachStreamToVideoElement(remoteVideoRef.current, remoteStream);
-
-        // Listen for track removal (when stream ends)
-        remoteStream.getTracks().forEach((track) => {
-          track.onended = () => {
-            console.log("Track ended, removing remote video");
-            remoteVideoRef.current.srcObject = null; // Clear the video element
-          };
-        });
-      };
-      peerConnection.current.onnegotiationneeded = async () => {
-        try {
-          // Only create an offer if signaling state is 'stable'
-          if (peerConnection.current.signalingState === "stable") {
-            await createOfferAndSend();
-          } else {
-            console.log("Negotiation needed but signaling state is not stable");
-          }
-        } catch (error) {
-          console.error("Error during renegotiation:", error);
-        }
-      };
-    }
-  };
-
-  // Function to parse the m-line order from an SDP
-
-  const createOfferAndSend = async () => {
-    try {
-      const offerOptions = {
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      };
-
-      // Only proceed if the signaling state is 'have-local-offer' or 'have-remote-offer'
-      if (peerConnection.current.signalingState !== "stable") {
-        console.log("Signaling state is not stable, skipping offer creation");
-        return;
-      }
-
-      const offer = await peerConnection.current.createOffer(offerOptions);
-
-      // Ensure audio comes before video in the SDP
-      offer.sdp = ensureAudioBeforeVideo(offer.sdp);
-
-      await peerConnection.current.setLocalDescription(offer);
-      console.log("Sending offer:", offer);
-      sendSignal({
-        type: "offer",
-        conferenceId: conferenceId,
-        offer: offer,
-      });
-    } catch (error) {
-      console.error("Error creating offer:", error);
-    }
-  };
-
-  const ensureAudioBeforeVideo = (sdp) => {
-    const sdpLines = sdp.split("\r\n");
-    const audioIndex = sdpLines.findIndex((line) => line.startsWith("m=audio"));
-    const videoIndex = sdpLines.findIndex((line) => line.startsWith("m=video"));
-
-    if (audioIndex !== -1 && videoIndex !== -1 && videoIndex < audioIndex) {
-      // Swap audio and video sections
-      const audioSection = sdpLines.splice(audioIndex, videoIndex - audioIndex);
-      sdpLines.splice(videoIndex, 0, ...audioSection);
-    }
-
-    return sdpLines.join("\r\n");
-  };
-
-  const handleRemoteOffer = async (offer) => {
-    if (
-      !peerConnection.current ||
-      peerConnection.current.connectionState === "closed"
-    ) {
-      handlePeerConnection();
-    }
-
-    try {
-      // Ensure SDP order
-      offer.sdp = ensureAudioBeforeVideo(offer.sdp);
-
-      // Handle signaling state
-      console.log("Signaling state:", peerConnection.current.signalingState);
-      if (peerConnection.current.signalingState === "stable") {
-        // Directly set the remote description if signaling state is stable
-        console.log("Setting remote description directly");
-        await peerConnection.current.setRemoteDescription(
-          new RTCSessionDescription(offer),
-        );
-        console.log("Remote description set successfully");
-
-        // Create and set local answer
-        const answer = await peerConnection.current.createAnswer();
-        answer.sdp = ensureAudioBeforeVideo(answer.sdp);
-        await peerConnection.current.setLocalDescription(answer);
-
-        sendSignal({
-          type: "answer",
-          conferenceId: conferenceId,
-          answer: answer,
-        });
-        //console.log("test");
-        //refresh the page
-        //window.location.reload();
-      } else {
-        // Rollback and retry if the signaling state is not stable
-        console.log("Signaling state is not stable. Rolling back...");
-        await Promise.all([
-          peerConnection.current.setLocalDescription({ type: "rollback" }),
-          peerConnection.current.setRemoteDescription(
-            new RTCSessionDescription(offer),
-          ),
-        ]);
-        console.log("Retrying with new offer...");
-
-        const answer = await peerConnection.current.createAnswer();
-        answer.sdp = ensureAudioBeforeVideo(answer.sdp);
-        await peerConnection.current.setLocalDescription(answer);
-
-        sendSignal({
-          type: "answer",
-          conferenceId: conferenceId,
-          answer: answer,
-        });
-      }
-    } catch (error) {
-      console.error("Error handling remote offer:", error);
-    }
-  };
-
-  const handleRemoteAnswer = async (answer) => {
-    try {
-      if (peerConnection.current.signalingState === "have-local-offer") {
-        await peerConnection.current.setRemoteDescription(
-          new RTCSessionDescription(answer),
-        );
-      } else {
-        console.warn(
-          "Received answer in unexpected state:",
-          peerConnection.current.signalingState,
-        );
-      }
-    } catch (error) {
-      console.error("Error setting remote description:", error);
-    }
-  };
-  const handleNewICECandidate = async (candidate) => {
-    console.log("Received new ICE candidate", candidate);
-    try {
-      await peerConnection.current.addIceCandidate(candidate);
-      console.log("ICE candidate added successfully");
-    } catch (error) {
-      console.error("Error adding new ICE candidate:", error);
-    }
-  };
-
-  const sendSignal = (message) => {
+  const sendWsSignal = (message) => {
+    console.log("Sending message:", message);
     socket.current.send(JSON.stringify(message));
   };
 
-  const brute = () => {
-    handlePeerConnection();
-    createOfferAndSend();
-    console.log("brute fired");
+  const hadleJoined = (data) => {
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: false })
+      .then((stream) => {
+        localStream.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        setLocalAudio(true);
+        setLocalVideo(true);
+
+        // Add local stream to all existing peer connections
+        Object.values(peerConnections.current).forEach((pc) => {
+          stream.getTracks().forEach((track) => {
+            pc.addTrack(track, stream);
+          });
+        });
+      })
+      .catch((error) => {
+        console.log("Failed to get local stream:", error);
+        alert("Please allow access to the camera and microphone");
+      });
   };
 
-  const getlocalStream = async () => {
-    try {
-      const constraints = { audio: true, video: true };
-      const localStream = await getUserMedia(constraints);
-      attachStreamToVideoElement(localVideoRef.current, localStream);
-      if (peerConnection.current) {
-        addLocalTracks(peerConnection.current, localStream);
-        console.log("Local stream added to peer connection");
-        // Remove this line:
-        // createOfferAndSend();
-      }
-    } catch (error) {
-      console.error("Failed to get local stream:", error);
-    }
-  };
+  const createPeerConnection = (data) => {
+    console.log("Creating peer connection for", data.from);
 
-  const leave = () => {
-    const messages = {
-      type: "leave",
-      conferenceId,
-      email: email,
+    const config = {
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     };
 
-    // Close & delete the peerConnection
-    //if (peerConnection.current) {
-    //  peerConnection.current.close();
-    //  peerConnection.current = null; // Optional: Nullify the peerConnection object
-    //}
-
-    // Turn off the camera and mic
-    if (localVideoRef.current.srcObject) {
-      localVideoRef.current.srcObject
-        .getTracks()
-        .forEach((track) => track.stop());
-      localVideoRef.current.srcObject = null; // Clear local video element
+    if (!data.from) {
+      console.error("Invalid email:", data);
+      return;
     }
 
-    // Also clear the remote video element
-    remoteVideoRef.current.srcObject = null;
+    peerConnections.current[data.from] = new RTCPeerConnection(config);
 
-    sendSignal(messages);
+    if (!peerConnections.current[data.from]) {
+      console.error("Failed to create RTCPeerConnection for:", data.from);
+      return;
+    }
 
-    // Optionally close the window or navigate away
-    // navigate("/");
+    peerConnections.current[data.from].onicecandidate = (event) => {
+      if (event.candidate) {
+        const message = {
+          type: "icecandidate",
+          candidate: event.candidate,
+          to: data.from,
+          from: email,
+          conferenceId: conferenceId,
+        };
+        sendWsSignal(message);
+      }
+    };
 
-    setTimeout(() => {
-      window.close();
-    }, 1000);
+    peerConnections.current[data.from].ontrack = (event) => {
+      console.log("Received remote stream:", event.streams[0]);
+
+      setRemoteStreams((prevStreams) => ({
+        ...prevStreams,
+        [data.from]: event.streams,
+      }));
+    };
+
+    // Add local stream to the new peer connection
+    if (localStream.current) {
+      localStream.current.getTracks().forEach((track) => {
+        peerConnections.current[data.from].addTrack(track, localStream.current);
+      });
+    }
   };
+
+  const createOffer = (data) => {
+    console.log("Creating offer");
+    peerConnections.current[data.from]
+      .createOffer()
+      .then((offer) => {
+        return peerConnections.current[data.from].setLocalDescription(offer);
+      })
+      .then(() => {
+        const message = {
+          type: "offer",
+          offer: peerConnections.current[data.from].localDescription,
+          from: email,
+          to: data.from,
+          conferenceId: conferenceId,
+        };
+        sendWsSignal(message);
+      })
+      .catch((error) => {
+        console.log("Failed to create offer:", error);
+      });
+  };
+
+  const handleOffer = (data) => {
+    console.log("Received offer:", data);
+
+    // Ensure peer connection exists
+    if (!peerConnections.current[data.from]) {
+      console.log(`Creating new RTCPeerConnection for ${data.from}`);
+      createPeerConnection(data); // This function should create a new peer connection
+    }
+
+    // Proceed with setting the remote description and creating an answer
+    peerConnections.current[data.from]
+      .setRemoteDescription(new RTCSessionDescription(data.offer))
+      .then(() => {
+        return peerConnections.current[data.from].createAnswer();
+      })
+      .then((answer) => {
+        return peerConnections.current[data.from].setLocalDescription(answer);
+      })
+      .then(() => {
+        const message = {
+          type: "answer",
+          answer: peerConnections.current[data.from].localDescription,
+          from: email,
+          to: data.from,
+          conferenceId: conferenceId,
+        };
+        sendWsSignal(message);
+      })
+      .catch((error) => {
+        console.log("Failed to create answer:", error);
+      });
+  };
+
+  const handleAnswer = (data) => {
+    console.log("Received answer:", data);
+    peerConnections.current[data.from]
+      .setRemoteDescription(new RTCSessionDescription(data.answer))
+      .catch((error) => {
+        console.log("Failed to set remote description:", error);
+      });
+  };
+
+  const handleIceCandidate = (data) => {
+    console.log("Received ICE candidate:", data);
+    const pc = peerConnections.current[data.from];
+    if (pc) {
+      pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((error) =>
+        console.error("Error adding ICE candidate:", error),
+      );
+    }
+  };
+
   return (
     <div>
-      <h1>Conference {conferenceId}</h1>
-      <button onClick={leave}>Leave Conference</button>
+      <h2>Conference: {conferenceId}</h2>
       <div>
-        <video ref={localVideoRef} autoPlay playsInline />
-        <video ref={remoteVideoRef} autoPlay playsInline />
+        <video ref={localVideoRef} autoPlay playsInline muted />
+      </div>
+      <div id="remote-videos-container">
+        {Object.entries(remoteStreams).map(([email, stream]) => (
+          <video
+            key={email}
+            autoPlay
+            playsInline
+            ref={(el) => {
+              if (el && stream) el.srcObject = stream[0];
+            }}
+            style={{ width: "200px", margin: "10px" }}
+          />
+        ))}
       </div>
     </div>
   );
 };
-
 export default Conference;

@@ -2,7 +2,7 @@ import React from "react";
 import { useState } from "react";
 import axios from "axios";
 const AddMeet = ({ onHandleAdd }) => {
-  const backend = "http://localhost:5000";
+  const backend = "https://192.168.29.232:5000";
   const [meetName, setMeetName] = useState("");
   const [meetParticipants, setMeetParticipants] = useState([]);
   const [ParticipantToAdd, setParticipantToAdd] = useState("");
@@ -11,7 +11,7 @@ const AddMeet = ({ onHandleAdd }) => {
     try {
       console.log(ParticipantToAdd);
       const checkAccount = await axios.get(
-        `${backend}/users/check?email=${ParticipantToAdd}`
+        `${backend}/users/check?email=${ParticipantToAdd}`,
       );
 
       setMeetParticipants([...meetParticipants, ParticipantToAdd]);
@@ -24,23 +24,22 @@ const AddMeet = ({ onHandleAdd }) => {
   const HandleSubmit = async (e) => {
     e.preventDefault();
 
-    try{
-      
-        const createMeet = await axios.post(
-          `${backend}/conference/create`, 
-              {
-                name: meetName,
-                participants: meetParticipants,
-              },
-              {
-                headers: {
-                token: localStorage.getItem("token"),
-                }
-              }
-        );
-        alert("Meet Created");
-    }catch(error){
-        alert("Error in creating meet");
+    try {
+      const createMeet = await axios.post(
+        `${backend}/conference/create`,
+        {
+          name: meetName,
+          participants: meetParticipants,
+        },
+        {
+          headers: {
+            token: localStorage.getItem("token"),
+          },
+        },
+      );
+      alert("Meet Created");
+    } catch (error) {
+      alert("Error in creating meet");
     }
     onHandleAdd();
   };
@@ -88,7 +87,7 @@ const AddMeet = ({ onHandleAdd }) => {
                     type="button"
                     onClick={() =>
                       setMeetParticipants(
-                        meetParticipants.filter((_, i) => i !== index)
+                        meetParticipants.filter((_, i) => i !== index),
                       )
                     }
                     className="text-red-500 mx-2 font-bold"

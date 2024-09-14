@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import axios from "axios";
-import {useNavigate} from "react-router-dom"
+import { useNavigate } from "react-router-dom";
 const Signup = () => {
-  const backend = "http://localhost:5000";
+  const backend = "https://192.168.29.232:5000";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const navigate=useNavigate()
+  const navigate = useNavigate();
 
   // Logic for signupg in
   const handleOnSubmit = async (e) => {
@@ -26,12 +26,12 @@ const Signup = () => {
       });
       console.log(signupres); // Log the response data
       alert(signupres.data.message);
-      navigate("/signin")
-      
+      navigate("/signin");
+
       // Handle the response data as needed
     } catch (error) {
       console.error("Error:", error);
-      alert(error.response.data.error)
+      alert(error.response.data.error);
       // Handle errors, such as network issues or server errors
     }
   };
