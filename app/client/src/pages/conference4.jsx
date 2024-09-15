@@ -1,6 +1,5 @@
-import react from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const Conference = () => {
@@ -13,20 +12,18 @@ const Conference = () => {
   const socket = useRef(null);
   const [isSocketOpen, setIsSocketOpen] = useState(false);
 
-  //local sream
-  const [localaudio, setLocalAudio] = useState(true);
-  const [localvideo, setLocalVideo] = useState(true);
+  // Local stream
+  const [localAudio, setLocalAudio] = useState(false);
+  const [localVideo, setLocalVideo] = useState(true);
   const localStream = useRef(null);
   const localVideoRef = useRef(null);
 
-  //remotes streams
-
+  // Remote streams
   const [remoteStreams, setRemoteStreams] = useState({});
-
   const peerConnections = useRef({});
 
   useEffect(() => {
-    securitycheck();
+    securityCheck();
     if (email) {
       connectSocket();
     }
@@ -42,11 +39,11 @@ const Conference = () => {
   useEffect(() => {
     if (Object.keys(remoteStreams).length > 0) {
       console.log("Remote streams updated, forwarding streams...");
-      forwardstream();
+      forwardStreams();
     }
   }, [remoteStreams]);
 
-  const securitycheck = async () => {
+  const securityCheck = async () => {
     try {
       const check = await axios.get(`${backend}/conference/access`, {
         headers: {
@@ -57,7 +54,7 @@ const Conference = () => {
       setEmail(check.data.email);
       setConferenceSize(check.data.size);
     } catch (error) {
-      console.log("security check error:", error);
+      console.log("Security check error:", error);
       alert("You are not authorized to view this conference");
       navigate("/");
     }
@@ -104,16 +101,14 @@ const Conference = () => {
 
       socket.current.onmessage = (message) => {
         const data = JSON.parse(message.data);
-        //console.log("Received message:", data);
 
         switch (data.type) {
           case "joined":
             console.log("Joined the conference as:", data);
-            hadleJoined(data);
+            handleJoined(data);
             if (data.from !== email) {
               createPeerConnection(data);
               createOffer(data);
-              //refire after 5 seconds
               setTimeout(() => {
                 createOffer(data);
               }, 5000);
@@ -143,15 +138,15 @@ const Conference = () => {
     socket.current.send(JSON.stringify(message));
   };
 
-  const hadleJoined = (data) => {
+  const handleJoined = (data) => {
     navigator.mediaDevices
-      .getUserMedia({ video: true, audio: false })
+      .getUserMedia({ video: localVideo, audio: localAudio })
       .then((stream) => {
         localStream.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-        setLocalAudio(true);
+        setLocalAudio(false);
         setLocalVideo(true);
 
         // Add local stream to all existing peer connections
@@ -204,14 +199,16 @@ const Conference = () => {
 
       setRemoteStreams((prevStreams) => {
         const updatedStreams = {
-          ...prevStreams, // Spread the previous streams (retain existing remote streams)
-          [data.from]: event.streams, // Add the new stream from the current peer
+          ...prevStreams,
+          [data.from]: event.streams,
         };
 
-        // Forward the stream after updating the state
-        setTimeout(() => forwardstream(), 7000);
+        console.log("Updated remote streams state:", updatedStreams);
 
-        return updatedStreams; // Return the updated streams, which React will set as the new state
+        // Forward the stream after updating the state
+        setTimeout(() => forwardStreams(), 7000);
+
+        return updatedStreams;
       });
     };
 
@@ -223,7 +220,7 @@ const Conference = () => {
     }
 
     // Forward all existing remote streams to the new peer
-    forwardstream();
+    forwardStreams();
   };
 
   const createOffer = (data) => {
@@ -300,7 +297,7 @@ const Conference = () => {
     }
   };
 
-  const forwardstream = () => {
+  const forwardStreams = () => {
     // Loop through all remote streams
     Object.entries(remoteStreams).forEach(([remotePeerEmail, streams]) => {
       console.log(`Forwarding remote streams from ${remotePeerEmail}`);
@@ -312,15 +309,11 @@ const Conference = () => {
         // Ensure we're not adding the stream back to the same peer that sent it
         if (peerEmail !== remotePeerEmail) {
           streams[0].getTracks().forEach((track) => {
-            // Get the existing senders for the peer connection
             const senders = peerConnections.current[peerEmail].getSenders();
-
-            // Check if the track is already being sent
             const trackAlreadySent = senders.find(
               (sender) => sender.track && sender.track.id === track.id,
             );
 
-            // Only add the track if it's not already being sent
             if (!trackAlreadySent) {
               try {
                 peerConnections.current[peerEmail].addTrack(track, streams[0]);
@@ -333,10 +326,6 @@ const Conference = () => {
                   error,
                 );
               }
-            } else {
-              console.log(
-                `Track from ${remotePeerEmail} is already being forwarded to ${peerEmail}`,
-              );
             }
           });
         }
@@ -344,20 +333,58 @@ const Conference = () => {
     });
   };
 
+  const handleLocalVideoChange = (e) => {
+    setLocalVideo(e.target.checked);
+    if (localStream.current) {
+      localStream.current.getVideoTracks().forEach((track) => {
+        track.enabled = e.target.checked;
+      });
+    }
+  };
+
+  const handleLocalAudioChange = (e) => {
+    setLocalAudio(e.target.checked);
+    if (localStream.current) {
+      localStream.current.getAudioTracks().forEach((track) => {
+        track.enabled = e.target.checked;
+      });
+    }
+  };
+
   return (
     <div>
-      <h2>Conference: {conferenceId}</h2>
+      <h1>Conference ID: {conferenceId}</h1>
+      <video
+        ref={localVideoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ width: "200px", margin: "10px" }}
+      />
+      <label>
+        <input
+          type="checkbox"
+          checked={localVideo}
+          onChange={handleLocalVideoChange}
+        />
+        Video
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={localAudio}
+          onChange={handleLocalAudioChange}
+        />
+        Audio
+      </label>
       <div>
-        <video ref={localVideoRef} autoPlay playsInline muted />
-      </div>
-      <div id="remote-videos-container">
-        {Object.entries(remoteStreams).map(([email, stream]) => (
+        {Object.entries(remoteStreams).map(([email, streams]) => (
           <video
             key={email}
             autoPlay
             playsInline
             ref={(el) => {
-              if (el && stream) el.srcObject = stream[0];
+              if (el && streams) el.srcObject = streams[0];
             }}
             style={{ width: "200px", margin: "10px" }}
           />
@@ -366,4 +393,5 @@ const Conference = () => {
     </div>
   );
 };
+
 export default Conference;
