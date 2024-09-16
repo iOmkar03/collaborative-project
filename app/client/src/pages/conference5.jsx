@@ -1,4 +1,4 @@
-import react from "react";
+import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -13,15 +13,14 @@ const Conference = () => {
   const socket = useRef(null);
   const [isSocketOpen, setIsSocketOpen] = useState(false);
 
-  //local sream
+  //local stream
   const [localaudio, setLocalAudio] = useState(true);
   const [localvideo, setLocalVideo] = useState(true);
   const localStream = useRef(null);
   const localVideoRef = useRef(null);
 
-  //remotes streams
-
-  const [remoteStreams, setRemoteStreams] = useState({});
+  //remote streams
+  const remoteStreams = useRef({});
 
   const peerConnections = useRef({});
 
@@ -192,14 +191,52 @@ const Conference = () => {
       }
     };
 
-    peerConnections.current[data.from].ontrack = (event) => {
-      console.log("Received remote stream:", event.streams[0]);
+    
+peerConnections.current[data.from].ontrack = (event) => {
+  console.log("Received remote stream:", event.streams[0]);
 
-      setRemoteStreams((prevStreams) => ({
-        ...prevStreams,
-        [data.from]: event.streams,
-      }));
-    };
+  const newStream = event.streams[0];
+
+  // Update remoteStreams useRef with array of streams
+  remoteStreams.current[data.from] = remoteStreams.current[data.from] || [];
+  remoteStreams.current[data.from].push(newStream);
+
+  // Force update to re-render the remote videos
+  forceUpdate();
+
+  // Forward the new stream to all other peer connections if any but not to self
+  Object.entries(peerConnections.current).forEach(([email, pc]) => {
+    if (email !== data.from) {
+      // Log the transfer
+      console.log(`Forwarding stream of ${data.from} to ${email}`);
+      newStream.getTracks().forEach((track) => {
+        pc.addTrack(track, newStream);
+      });
+    }
+  });
+
+  // Forward existing streams to the new peer
+  Object.entries(remoteStreams.current).forEach(([email, streams]) => {
+    if (email !== data.from) {
+      // Check if streams is an array
+      if (Array.isArray(streams)) {
+        streams.forEach((existingStream) => {
+          if (existingStream instanceof MediaStream) {
+            // Log the transfer
+            console.log(`Forwarding stream of ${email} to ${data.from}`);
+            existingStream.getTracks().forEach((track) => {
+              peerConnections.current[data.from].addTrack(track, existingStream);
+            });
+          } else {
+            console.error(`Invalid stream for ${email}:`, existingStream);
+          }
+        });
+      } else {
+        console.error(`Invalid streams array for ${email}:`, streams);
+      }
+    }
+  });
+};
 
     // Add local stream to the new peer connection
     if (localStream.current) {
@@ -283,6 +320,10 @@ const Conference = () => {
     }
   };
 
+  // Force update function
+  const [, updateState] = useState();
+  const forceUpdate = React.useCallback(() => updateState({}), []);
+
   return (
     <div>
       <h2>Conference: {conferenceId}</h2>
@@ -290,7 +331,7 @@ const Conference = () => {
         <video ref={localVideoRef} autoPlay playsInline muted />
       </div>
       <div id="remote-videos-container">
-        {Object.entries(remoteStreams).map(([email, stream]) => (
+        {Object.entries(remoteStreams.current).map(([email, stream]) => (
           <video
             key={email}
             autoPlay
@@ -305,4 +346,5 @@ const Conference = () => {
     </div>
   );
 };
+
 export default Conference;
