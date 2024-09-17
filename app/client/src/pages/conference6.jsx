@@ -1,3 +1,4 @@
+
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
@@ -224,10 +225,7 @@ const Conference = () => {
             if (existingStream instanceof MediaStream) {
               console.log(`Forwarding stream of ${email} to ${data.from}`);
               existingStream.getTracks().forEach((track) => {
-                peerConnections.current[data.from].addTrack(
-                  track,
-                  existingStream,
-                );
+                peerConnections.current[data.from].addTrack(track, existingStream);
               });
             } else {
               console.error(`Invalid stream for ${email}:`, existingStream);
@@ -319,6 +317,19 @@ const Conference = () => {
     }
   };
 
+  // Handle track addition
+  const handleTrackEvent = (event) => {
+    const { streams } = event;
+    if (streams && streams.length > 0) {
+      streams[0].getTracks().forEach((track) => {
+        // Log track addition
+        console.log("Track added:", track);
+        // Create and send new offer to update tracks
+        createOffer({ from: event.srcElement.id });
+      });
+    }
+  };
+
   // Force update function
   const [, updateState] = useState();
   const forceUpdate = React.useCallback(() => updateState({}), []);
@@ -341,7 +352,7 @@ const Conference = () => {
               }}
               style={{ width: "200px", margin: "10px" }}
             />
-          )),
+          ))
         )}
       </div>
     </div>
@@ -349,3 +360,4 @@ const Conference = () => {
 };
 
 export default Conference;
+

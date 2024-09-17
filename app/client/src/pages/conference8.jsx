@@ -1,6 +1,5 @@
-import React from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const Conference = () => {
@@ -18,7 +17,8 @@ const Conference = () => {
   const [localvideo, setLocalVideo] = useState(true);
   const localStream = useRef(null);
   const localVideoRef = useRef(null);
-
+  const streamOfRef = useRef(undefined);
+  const streamOfRef2 = useRef(undefined);
   // Remote streams
   const remoteStreams = useRef({});
 
@@ -30,7 +30,6 @@ const Conference = () => {
       connectSocket();
     }
     return () => {
-      // Cleanup function
       if (localStream.current) {
         localStream.current.getTracks().forEach((track) => track.stop());
       }
@@ -48,6 +47,11 @@ const Conference = () => {
       });
       setEmail(check.data.email);
       setConferenceSize(check.data.size);
+      //initiate participants as we get participants from the backend
+      check.data.participants.forEach((participant) => {
+        //initialze as empty ref
+        remoteStreams.current[participant] = [];
+      });
     } catch (error) {
       console.log("security check error:", error);
       alert("You are not authorized to view this conference");
@@ -56,14 +60,13 @@ const Conference = () => {
   };
 
   const connectSocket = () => {
-    if (socket.current) {
-      if (
-        socket.current.readyState === WebSocket.CONNECTING ||
-        socket.current.readyState === WebSocket.OPEN
-      ) {
-        console.log("Using the existing socket");
-        return;
-      }
+    if (
+      socket.current &&
+      (socket.current.readyState === WebSocket.CONNECTING ||
+        socket.current.readyState === WebSocket.OPEN)
+    ) {
+      console.log("Using the existing socket");
+      return;
     }
 
     try {
@@ -96,37 +99,36 @@ const Conference = () => {
 
       socket.current.onmessage = (message) => {
         const data = JSON.parse(message.data);
-        //console.log("Received message:", data);
-
-        switch (data.type) {
-          case "joined":
-            console.log("Joined the conference as:", data);
-            hadleJoined(data);
-            if (data.from !== email) {
-              createPeerConnection(data);
-              createOffer(data);
-              // Refire after 5 seconds
-              setTimeout(() => {
-                createOffer(data);
-              }, 5000);
-            }
-            break;
-          case "offer":
-            handleOffer(data);
-            break;
-          case "answer":
-            handleAnswer(data);
-            break;
-          case "icecandidate":
-            handleIceCandidate(data);
-            break;
-          default:
-            break;
-        }
+        handleSocketMessage(data);
       };
     } catch (error) {
       console.error("Failed to connect to the WebSocket server:", error);
       setTimeout(connectSocket, 5000);
+    }
+  };
+
+  const handleSocketMessage = (data) => {
+    switch (data.type) {
+      case "joined":
+        console.log("Joined the conference as:", data);
+        handleJoined(data);
+        if (data.from !== email) {
+          createPeerConnection(data);
+          createOffer(data);
+          setTimeout(() => createOffer(data), 5000);
+        }
+        break;
+      case "offer":
+        handleOffer(data);
+        break;
+      case "answer":
+        handleAnswer(data);
+        break;
+      case "icecandidate":
+        handleIceCandidate(data);
+        break;
+      default:
+        break;
     }
   };
 
@@ -135,7 +137,7 @@ const Conference = () => {
     socket.current.send(JSON.stringify(message));
   };
 
-  const hadleJoined = (data) => {
+  const handleJoined = (data) => {
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: false })
       .then((stream) => {
@@ -146,7 +148,6 @@ const Conference = () => {
         setLocalAudio(false);
         setLocalVideo(true);
 
-        // Add local stream to all existing peer connections
         Object.values(peerConnections.current).forEach((pc) => {
           stream.getTracks().forEach((track) => {
             pc.addTrack(track, stream);
@@ -171,6 +172,11 @@ const Conference = () => {
       return;
     }
 
+    if (peerConnections.current[data.from]) {
+      console.log("Peer connection already exists for", data.from);
+      return;
+    }
+
     peerConnections.current[data.from] = new RTCPeerConnection(config);
 
     if (!peerConnections.current[data.from]) {
@@ -192,13 +198,32 @@ const Conference = () => {
     };
 
     peerConnections.current[data.from].ontrack = (event) => {
-      console.log("Received remote stream:", event.streams[0]);
+      console.log("Received remote stream:", event.streams);
 
       const newStream = event.streams[0];
 
-      // Update remoteStreams useRef with array of streams
-      remoteStreams.current[data.from] = remoteStreams.current[data.from] || [];
-      remoteStreams.current[data.from].push(newStream);
+      const temp = [];
+      temp.push(newStream);
+
+      // Update remoteStreams useRef with the new stream, using email as the key
+      //
+      //
+
+      console.log(
+        "data.from:",
+        data.from,
+        "streamOfRef.current:",
+        streamOfRef.current,
+      );
+      //
+      console.log("magaical", streamOfRef.current);
+      if (streamOfRef.current === undefined) {
+        remoteStreams.current[data.from] = temp;
+      } else {
+        remoteStreams.current[streamOfRef.current] = temp;
+        streamOfRef.current = undefined;
+      }
+      // remoteStreams.current["deep5@gmail.com"] = temp;
 
       console.log("Remote streams:", remoteStreams.current);
 
@@ -206,35 +231,36 @@ const Conference = () => {
       forceUpdate();
 
       // Forward the new stream to all other peer connections except to self
-      Object.entries(peerConnections.current).forEach(([email, pc]) => {
-        if (email !== data.from) {
-          // Log the transfer
-          console.log(`Forwarding stream of ${data.from} to ${email}`);
+      Object.entries(peerConnections.current).forEach(([peerEmail, pc]) => {
+        if (peerEmail !== data.from) {
+          console.log(`Forwarding stream of ${data.from} to ${peerEmail}`);
           newStream.getTracks().forEach((track) => {
-            console.log("Adding track to", email);
-            pc.addTrack(track, newStream);
+            console.log("Adding track to", peerEmail);
+            pc.addTrack(track, remoteStreams.current[data.from][0]);
           });
+
+          pc.createOffer()
+            .then((offer) => pc.setLocalDescription(offer))
+            .then(() => {
+              // Send the offer to the peer
+              const message = {
+                type: "offer",
+                offer: pc.localDescription,
+                from: email, //current user's email
+                to: peerEmail,
+                conferenceId: conferenceId,
+                streamOf: data.from,
+              };
+              sendWsSignal(message);
+            })
+            .catch((error) => {
+              console.error(`Failed to renegotiate with ${peerEmail}:`, error);
+            });
         }
       });
 
-      // Forward existing streams to the new peer
-      Object.entries(remoteStreams.current).forEach(([email, streams]) => {
-        if (email !== data.from) {
-          streams.forEach((existingStream) => {
-            if (existingStream instanceof MediaStream) {
-              console.log(`Forwarding stream of ${email} to ${data.from}`);
-              existingStream.getTracks().forEach((track) => {
-                peerConnections.current[data.from].addTrack(
-                  track,
-                  existingStream,
-                );
-              });
-            } else {
-              console.error(`Invalid stream for ${email}:`, existingStream);
-            }
-          });
-        }
-      });
+      //forward all the streams to the new peer connection usign similar logic
+      //as above
     };
 
     // Add local stream to the new peer connection
@@ -270,13 +296,13 @@ const Conference = () => {
   const handleOffer = (data) => {
     console.log("Received offer:", data);
 
-    // Ensure peer connection exists
+    streamOfRef.current = data.streamOf;
+
     if (!peerConnections.current[data.from]) {
       console.log(`Creating new RTCPeerConnection for ${data.from}`);
-      createPeerConnection(data); // This function should create a new peer connection
+      createPeerConnection(data);
     }
 
-    // Proceed with setting the remote description and creating an answer
     peerConnections.current[data.from]
       .setRemoteDescription(new RTCSessionDescription(data.offer))
       .then(() => {
@@ -292,6 +318,7 @@ const Conference = () => {
           from: email,
           to: data.from,
           conferenceId: conferenceId,
+          streamOf: data.streamOf,
         };
         sendWsSignal(message);
       })
@@ -321,7 +348,7 @@ const Conference = () => {
 
   // Force update function
   const [, updateState] = useState();
-  const forceUpdate = React.useCallback(() => updateState({}), []);
+  const forceUpdate = useCallback(() => updateState({}), []);
 
   return (
     <div>
@@ -330,17 +357,19 @@ const Conference = () => {
         <video ref={localVideoRef} autoPlay playsInline muted />
       </div>
       <div id="remote-videos-container">
-        {Object.entries(remoteStreams.current).map(([email, streams]) =>
+        {Object.entries(remoteStreams.current).map(([userEmail, streams]) =>
           streams.map((stream, index) => (
-            <video
-              key={`${email}-${index}`}
-              autoPlay
-              playsInline
-              ref={(el) => {
-                if (el) el.srcObject = stream;
-              }}
-              style={{ width: "200px", margin: "10px" }}
-            />
+            <div key={`${userEmail}-${index}`}>
+              <video
+                autoPlay
+                playsInline
+                ref={(el) => {
+                  if (el) el.srcObject = stream;
+                }}
+                style={{ width: "200px", margin: "10px" }}
+              />
+              <p>{userEmail}</p>
+            </div>
           )),
         )}
       </div>

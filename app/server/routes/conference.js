@@ -73,7 +73,8 @@ router.get('/access',verifyUser,async(req,res)=>{
         {
           message:"Authorized",
           size:size,
-          email:email
+          email:email,
+          participants:participants
         }
       );
     }
