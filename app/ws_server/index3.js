@@ -194,8 +194,7 @@ function handleJoin(ws, data) {
   }
 
   //display entire meeting object
-  //sp in sp make sure dont neet to displsy the content of ws 
-
+  //sp in sp make sure dont neet to displsy the content of ws
 
   console.log("sp", meetings[conferenceId].sp);
   console.log("np", meetings[conferenceId].np);
@@ -375,6 +374,8 @@ function handleOffer(ws, data) {
       conferenceId,
       from,
       offer,
+      streamOf: data.streamOf,
+      streamOf2: data.streamOf2,
     }),
   );
 

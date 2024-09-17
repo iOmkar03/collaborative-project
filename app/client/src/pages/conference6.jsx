@@ -1,4 +1,5 @@
-import react from "react";
+
+import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -13,15 +14,14 @@ const Conference = () => {
   const socket = useRef(null);
   const [isSocketOpen, setIsSocketOpen] = useState(false);
 
-  //local sream
+  // Local stream
   const [localaudio, setLocalAudio] = useState(true);
   const [localvideo, setLocalVideo] = useState(true);
   const localStream = useRef(null);
   const localVideoRef = useRef(null);
 
-  //remotes streams
-
-  const [remoteStreams, setRemoteStreams] = useState({});
+  // Remote streams
+  const remoteStreams = useRef({});
 
   const peerConnections = useRef({});
 
@@ -106,7 +106,7 @@ const Conference = () => {
             if (data.from !== email) {
               createPeerConnection(data);
               createOffer(data);
-              //refire after 5 seconds
+              // Refire after 5 seconds
               setTimeout(() => {
                 createOffer(data);
               }, 5000);
@@ -144,7 +144,7 @@ const Conference = () => {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-        setLocalAudio(true);
+        setLocalAudio(false);
         setLocalVideo(true);
 
         // Add local stream to all existing peer connections
@@ -195,10 +195,44 @@ const Conference = () => {
     peerConnections.current[data.from].ontrack = (event) => {
       console.log("Received remote stream:", event.streams[0]);
 
-      setRemoteStreams((prevStreams) => ({
-        ...prevStreams,
-        [data.from]: event.streams,
-      }));
+      const newStream = event.streams[0];
+
+      // Update remoteStreams useRef with array of streams
+      remoteStreams.current[data.from] = remoteStreams.current[data.from] || [];
+      remoteStreams.current[data.from].push(newStream);
+
+      console.log("Remote streams:", remoteStreams.current);
+
+      // Force update to re-render the remote videos
+      forceUpdate();
+
+      // Forward the new stream to all other peer connections except to self
+      Object.entries(peerConnections.current).forEach(([email, pc]) => {
+        if (email !== data.from) {
+          // Log the transfer
+          console.log(`Forwarding stream of ${data.from} to ${email}`);
+          newStream.getTracks().forEach((track) => {
+            console.log("Adding track to", email);
+            pc.addTrack(track, newStream);
+          });
+        }
+      });
+
+      // Forward existing streams to the new peer
+      Object.entries(remoteStreams.current).forEach(([email, streams]) => {
+        if (email !== data.from) {
+          streams.forEach((existingStream) => {
+            if (existingStream instanceof MediaStream) {
+              console.log(`Forwarding stream of ${email} to ${data.from}`);
+              existingStream.getTracks().forEach((track) => {
+                peerConnections.current[data.from].addTrack(track, existingStream);
+              });
+            } else {
+              console.error(`Invalid stream for ${email}:`, existingStream);
+            }
+          });
+        }
+      });
     };
 
     // Add local stream to the new peer connection
@@ -283,6 +317,23 @@ const Conference = () => {
     }
   };
 
+  // Handle track addition
+  const handleTrackEvent = (event) => {
+    const { streams } = event;
+    if (streams && streams.length > 0) {
+      streams[0].getTracks().forEach((track) => {
+        // Log track addition
+        console.log("Track added:", track);
+        // Create and send new offer to update tracks
+        createOffer({ from: event.srcElement.id });
+      });
+    }
+  };
+
+  // Force update function
+  const [, updateState] = useState();
+  const forceUpdate = React.useCallback(() => updateState({}), []);
+
   return (
     <div>
       <h2>Conference: {conferenceId}</h2>
@@ -290,19 +341,23 @@ const Conference = () => {
         <video ref={localVideoRef} autoPlay playsInline muted />
       </div>
       <div id="remote-videos-container">
-        {Object.entries(remoteStreams).map(([email, stream]) => (
-          <video
-            key={email}
-            autoPlay
-            playsInline
-            ref={(el) => {
-              if (el && stream) el.srcObject = stream[0];
-            }}
-            style={{ width: "200px", margin: "10px" }}
-          />
-        ))}
+        {Object.entries(remoteStreams.current).map(([email, streams]) =>
+          streams.map((stream, index) => (
+            <video
+              key={`${email}-${index}`}
+              autoPlay
+              playsInline
+              ref={(el) => {
+                if (el) el.srcObject = stream;
+              }}
+              style={{ width: "200px", margin: "10px" }}
+            />
+          ))
+        )}
       </div>
     </div>
   );
 };
+
 export default Conference;
+
