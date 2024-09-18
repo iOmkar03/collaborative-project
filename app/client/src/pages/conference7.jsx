@@ -209,7 +209,12 @@ const Conference = () => {
       //
       //
 
-console.log("data.from:", data.from, "streamOfRef.current:", streamOfRef.current);
+      console.log(
+        "data.from:",
+        data.from,
+        "streamOfRef.current:",
+        streamOfRef.current,
+      );
       //
       console.log("magaical", streamOfRef.current);
       if (streamOfRef.current === undefined) {
@@ -254,11 +259,8 @@ console.log("data.from:", data.from, "streamOfRef.current:", streamOfRef.current
         }
       });
 
-      //forward all the streams to the new peer connection usign similar logic 
+      //forward all the streams to the new peer connection usign similar logic
       //as above
-
-
-     
     };
 
     // Add local stream to the new peer connection

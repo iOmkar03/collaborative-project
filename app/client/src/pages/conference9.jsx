@@ -17,12 +17,13 @@ const Conference = () => {
   const [localvideo, setLocalVideo] = useState(true);
   const localStream = useRef(null);
   const localVideoRef = useRef(null);
-  const streamOfRef = useRef(undefined);
-  const streamOfRef2 = useRef(undefined);
+
   // Remote streams
   const remoteStreams = useRef({});
 
   const peerConnections = useRef({});
+  const addedTracks = useRef({});
+  const peerStates = useRef({});
 
   useEffect(() => {
     securitycheck();
@@ -47,9 +48,7 @@ const Conference = () => {
       });
       setEmail(check.data.email);
       setConferenceSize(check.data.size);
-      //initiate participants as we get participants from the backend
       check.data.participants.forEach((participant) => {
-        //initialze as empty ref
         remoteStreams.current[participant] = [];
       });
     } catch (error) {
@@ -112,11 +111,6 @@ const Conference = () => {
       case "joined":
         console.log("Joined the conference as:", data);
         handleJoined(data);
-        if (data.from !== email) {
-          createPeerConnection(data);
-          createOffer(data);
-          setTimeout(() => createOffer(data), 5000);
-        }
         break;
       case "offer":
         handleOffer(data);
@@ -148,11 +142,28 @@ const Conference = () => {
         setLocalAudio(false);
         setLocalVideo(true);
 
-        Object.values(peerConnections.current).forEach((pc) => {
-          stream.getTracks().forEach((track) => {
-            pc.addTrack(track, stream);
+        if (data.from !== email) {
+          // This is a new user joining
+          createPeerConnection(data);
+
+          // Forward all existing streams to the new user
+          forwardExistingStreamsToNewUser(data.from);
+
+          // Create an offer to send our stream to the new user
+          createOffer(data);
+
+          setTimeout(() => {
+            createOffer(data);
+          }, 5000);
+        } else {
+          // This is the current user joining
+          // Add local stream to all existing peer connections
+          Object.values(peerConnections.current).forEach((pc) => {
+            stream.getTracks().forEach((track) => {
+              pc.addTrack(track, stream);
+            });
           });
-        });
+        }
       })
       .catch((error) => {
         console.log("Failed to get local stream:", error);
@@ -167,138 +178,41 @@ const Conference = () => {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     };
 
-    if (!data.from) {
-      console.error("Invalid email:", data);
-      return;
-    }
-
-    if (peerConnections.current[data.from]) {
-      console.log("Peer connection already exists for", data.from);
+    if (!data.from || peerConnections.current[data.from]) {
+      console.log(
+        "Invalid email or peer connection already exists:",
+        data.from,
+      );
       return;
     }
 
     peerConnections.current[data.from] = new RTCPeerConnection(config);
-
-    if (!peerConnections.current[data.from]) {
-      console.error("Failed to create RTCPeerConnection for:", data.from);
-      return;
-    }
+    addedTracks.current[data.from] = new Set();
+    peerStates.current[data.from] = "new";
 
     peerConnections.current[data.from].onicecandidate = (event) => {
       if (event.candidate) {
-        const message = {
+        sendWsSignal({
           type: "icecandidate",
           candidate: event.candidate,
           to: data.from,
           from: email,
           conferenceId: conferenceId,
-        };
-        sendWsSignal(message);
+        });
       }
     };
 
     peerConnections.current[data.from].ontrack = (event) => {
-      setTimeout(() => {
-        console.log("Temp wait after data from", data.from);
-      }, 5000);
-      console.log("Received remote stream:", event.streams);
+      handleNewTrack(event, data.from);
+    };
 
-      const newStream = event.streams[0];
-
-      const temp = [];
-      temp.push(newStream);
-
-      // Update remoteStreams useRef with the new stream, using email as the key
-      //
-      //
-
+    peerConnections.current[data.from].onsignalingstatechange = () => {
+      peerStates.current[data.from] =
+        peerConnections.current[data.from].signalingState;
       console.log(
-        "data.from:",
-        data.from,
-        "streamOfRef.current:",
-        streamOfRef.current,
+        `Signaling state changed for ${data.from}:`,
+        peerStates.current[data.from],
       );
-      //
-      console.log("magaical", streamOfRef.current);
-      if (streamOfRef.current === undefined) {
-        remoteStreams.current[data.from] = temp;
-      } else {
-        remoteStreams.current[streamOfRef.current] = temp;
-        streamOfRef.current = undefined;
-      }
-      // remoteStreams.current["deep5@gmail.com"] = temp;
-
-      console.log("Remote streams:", remoteStreams.current);
-
-      // Force update to re-render the remote videos
-      forceUpdate();
-
-      // Forward the new stream to all other peer connections except to self
-      Object.entries(peerConnections.current).forEach(([peerEmail, pc]) => {
-
-        if (peerEmail !== data.from && peerEmail !== email) {
-          console.log(`Forwarding stream of ${data.from} to ${peerEmail}`);
-          newStream.getTracks().forEach((track) => {
-            console.log("Adding track to", peerEmail);
-            pc.addTrack(track, remoteStreams.current[data.from][0]);
-          });
-
-          pc.createOffer()
-            .then((offer) => pc.setLocalDescription(offer))
-            .then(() => {
-              // Send the offer to the peer
-              const message = {
-                type: "offer",
-                offer: pc.localDescription,
-                from: email, //current user's email
-                to: peerEmail,
-                conferenceId: conferenceId,
-                streamOf: data.from,
-              };
-              sendWsSignal(message);
-              setTimeout(()=>{
-                console.log("waiting after new to old offer,i.e",data.from,"to",peerEmail);
-              },5000);
-            })
-            .catch((error) => {
-              console.error(`Failed to renegotiate with ${peerEmail}:`, error);
-            });
-        }
-      });
-
-      //forward all the remote streams to the new joiner  similar logic
-      Object.entries(remoteStreams.current).forEach(([peerEmail, streams]) => {
-        if (peerEmail !== data.from && peerEmail !== email) {
-          streams.forEach((stream) => {
-            console.log("Adding track to", data.from);
-            peerConnections.current[data.from].addTrack(
-              stream.getTracks()[0],
-              stream,
-            );
-          });
-
-          peerConnections.current[data.from]
-            .createOffer()
-            .then((offer) =>
-              peerConnections.current[data.from].setLocalDescription(offer),
-            )
-            .then(() => {
-              const message = {
-                type: "offer",
-                offer: peerConnections.current[data.from].localDescription,
-                from: email,
-                to: peerEmail,
-                conferenceId: conferenceId,
-                streamOf: data.from,
-              };
-              sendWsSignal(message);
-              setTimeout(() => {
-                console.log("waiting after old to new offer,i.e",peerEmail,"to",data.from);
-              }, 5000);
-              console.log("wait time completed after old to new offer:",peerEmail,"to",data.from);
-            });
-        }
-      });
     };
 
     // Add local stream to the new peer connection
@@ -309,79 +223,160 @@ const Conference = () => {
     }
   };
 
-  const createOffer = (data) => {
-    console.log("Creating offer");
-    peerConnections.current[data.from]
+  const handleNewTrack = (event, fromEmail) => {
+    console.log("Received new track from:", fromEmail);
+
+    const newStream = event.streams[0];
+    if (!remoteStreams.current[fromEmail]) {
+      remoteStreams.current[fromEmail] = [];
+    }
+    remoteStreams.current[fromEmail].push(newStream);
+
+    forceUpdate();
+
+    // Forward the new stream to all other peer connections
+    Object.entries(peerConnections.current).forEach(([peerEmail, pc]) => {
+      if (peerEmail !== fromEmail && peerEmail !== email) {
+        forwardStreamToPeer(newStream, pc, peerEmail, fromEmail);
+      }
+    });
+  };
+
+  const forwardExistingStreamsToNewUser = (newUserEmail) => {
+    Object.entries(remoteStreams.current).forEach(
+      ([existingUserEmail, streams]) => {
+        if (existingUserEmail !== newUserEmail) {
+          streams.forEach((stream) => {
+            forwardStreamToPeer(
+              stream,
+              peerConnections.current[newUserEmail],
+              newUserEmail,
+              existingUserEmail,
+            );
+          });
+        }
+      },
+    );
+  };
+
+  const forwardStreamToPeer = (stream, peerConnection, toPeer, fromPeer) => {
+    if (!addedTracks.current[toPeer]) {
+      addedTracks.current[toPeer] = new Set();
+    }
+
+    let tracksAdded = false;
+    stream.getTracks().forEach((track) => {
+      if (!addedTracks.current[toPeer].has(track.id)) {
+        peerConnection.addTrack(track, stream);
+        addedTracks.current[toPeer].add(track.id);
+        tracksAdded = true;
+      }
+    });
+
+    if (tracksAdded) {
+      negotiateConnection(peerConnection, toPeer, fromPeer);
+    }
+  };
+
+  const negotiateConnection = (peerConnection, toPeer, streamOf) => {
+    //if (peerStates.current[toPeer] !== "stable") {
+    //  console.log(
+    //    `Peer ${toPeer} is not in stable state. Current state:`,
+    //    peerStates.current[toPeer],
+    //  );
+    //  setTimeout(
+    //    () => negotiateConnection(peerConnection, toPeer, streamOf),
+    //    1000,
+    //  );
+    //  return;
+    //}
+
+    peerConnection
       .createOffer()
-      .then((offer) => {
-        return peerConnections.current[data.from].setLocalDescription(offer);
-      })
+      .then((offer) => peerConnection.setLocalDescription(offer))
       .then(() => {
-        const message = {
+        sendWsSignal({
           type: "offer",
-          offer: peerConnections.current[data.from].localDescription,
+          offer: peerConnection.localDescription,
           from: email,
-          to: data.from,
+          to: toPeer,
           conferenceId: conferenceId,
-        };
-        sendWsSignal(message);
+          streamOf: streamOf,
+        });
       })
       .catch((error) => {
-        console.log("Failed to create offer:", error);
+        console.error(`Failed to negotiate with ${toPeer}:`, error);
+        // Retry after a delay
+        setTimeout(
+          () => negotiateConnection(peerConnection, toPeer, streamOf),
+          2000,
+        );
       });
+  };
+
+  const createOffer = (data) => {
+    console.log("Creating offer for", data.from);
+    negotiateConnection(peerConnections.current[data.from], data.from, email);
   };
 
   const handleOffer = (data) => {
     console.log("Received offer:", data);
 
-    streamOfRef.current = data.streamOf;
-
     if (!peerConnections.current[data.from]) {
-      console.log(`Creating new RTCPeerConnection for ${data.from}`);
       createPeerConnection(data);
     }
 
-    peerConnections.current[data.from]
-      .setRemoteDescription(new RTCSessionDescription(data.offer))
+    const pc = peerConnections.current[data.from];
+
+    //if (peerStates.current[data.from] !== "stable") {
+    //  console.log(
+    //    `Cannot handle offer. Peer ${data.from} is not in stable state.`,
+    //  );
+    //  return;
+    //}
+
+    pc.setRemoteDescription(new RTCSessionDescription(data.offer))
+      .then(() => pc.createAnswer())
+      .then((answer) => pc.setLocalDescription(answer))
       .then(() => {
-        return peerConnections.current[data.from].createAnswer();
-      })
-      .then((answer) => {
-        return peerConnections.current[data.from].setLocalDescription(answer);
-      })
-      .then(() => {
-        const message = {
+        sendWsSignal({
           type: "answer",
-          answer: peerConnections.current[data.from].localDescription,
+          answer: pc.localDescription,
           from: email,
           to: data.from,
           conferenceId: conferenceId,
           streamOf: data.streamOf,
-        };
-        sendWsSignal(message);
+        });
       })
       .catch((error) => {
-        console.log("Failed to create answer:", error);
+        console.log("Error handling offer:", error);
       });
   };
 
   const handleAnswer = (data) => {
     console.log("Received answer:", data);
-    peerConnections.current[data.from]
-      .setRemoteDescription(new RTCSessionDescription(data.answer))
-      .catch((error) => {
-        console.log("Failed to set remote description:", error);
-      });
+    const pc = peerConnections.current[data.from];
+    if (pc && peerStates.current[data.from] === "have-local-offer") {
+      pc.setRemoteDescription(new RTCSessionDescription(data.answer)).catch(
+        (error) => {
+          console.log("Failed to set remote description:", error);
+        },
+      );
+    } else {
+      console.log(
+        `Cannot set remote description. Invalid state for peer ${data.from}`,
+      );
+    }
   };
 
   const handleIceCandidate = (data) => {
     console.log("Received ICE candidate:", data);
     const pc = peerConnections.current[data.from];
-    if (pc) {
-      pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((error) =>
-        console.error("Error adding ICE candidate:", error),
-      );
-    }
+    //if (pc) {
+    //  pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((error) =>
+    //    console.error("Error adding ICE candidate:", error),
+    //  );
+    //}
   };
 
   // Force update function
