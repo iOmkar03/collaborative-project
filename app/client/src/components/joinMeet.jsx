@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 const JoinMeet = ({ onHandleJoin }) => {
   const navigate = useNavigate();
+ //const backend ="https://192.168.132.109:5000";
   const backend = "https://192.168.29.232:5000";
   const [consferances, setConsferances] = useState([]);
   useEffect(() => {

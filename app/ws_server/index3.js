@@ -146,7 +146,44 @@ function handleJoin(ws, data) {
 
       // Find an SP that has fewer than 3 NPs
       for (let sp of meeting.sp) {
-        if (sp.np.length < 2) {
+        if (sp.np.length < 1) {
+          // Adjust number of NPs per SP as per requirement
+          //
+          meetings[conferenceId].np.push({
+            email: email,
+            ws: ws,
+          });
+
+          sp.np.push({
+            email: email,
+            ws: ws,
+          });
+
+          // Normal peer sends 'joined' response
+          ws.send(
+            JSON.stringify({
+              type: "joined",
+              conferenceId,
+              role: "np",
+              assignedTo: sp.email,
+              postion: "self",
+              from: email,
+            }),
+          );
+
+          sp.ws.send(
+            JSON.stringify({
+              type: "joined",
+              conferenceId,
+              role: "sp",
+              from: email,
+              position: "child",
+            }),
+          );
+
+          assigned = true;
+          break;
+        } else if (sp.np.length < 2) {
           // Adjust number of NPs per SP as per requirement
           //
           meetings[conferenceId].np.push({
