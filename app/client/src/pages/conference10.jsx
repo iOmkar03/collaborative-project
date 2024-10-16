@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  PhoneOff,
+  Minimize2,
+  Maximize2,
+} from "lucide-react";
 
 const Conference = () => {
-   //const backend ="https://192.168.132.109:5000";
- //const wsbackend ="https://192.168.132.109:3001";
   const backend = "https://192.168.29.232:5000";
   const wsbackend = "https://192.168.29.232:3001";
   const navigate = useNavigate();
@@ -22,10 +29,35 @@ const Conference = () => {
 
   // Remote streams
   const remoteStreams = useRef({});
+  const [remoteStreamsList, setRemoteStreamsList] = useState([]);
 
   const peerConnections = useRef({});
   const addedTracks = useRef({});
   const peerStates = useRef({});
+
+  // Video fit states
+  const [videoFitStates, setVideoFitStates] = useState({});
+
+  // Update remote streams list when streams change
+  useEffect(() => {
+    const updateStreamsList = () => {
+      const streamsList = [];
+      Object.entries(remoteStreams.current).forEach(([userEmail, streams]) => {
+        streams.forEach((stream, index) => {
+          streamsList.push({
+            id: `${userEmail}-${index}`,
+            userEmail,
+            stream,
+          });
+        });
+      });
+      setRemoteStreamsList(streamsList);
+    };
+
+    // Set up an interval to check for stream changes
+    const intervalId = setInterval(updateStreamsList, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     securitycheck();
@@ -135,13 +167,13 @@ const Conference = () => {
 
   const handleJoined = (data) => {
     navigator.mediaDevices
-      .getUserMedia({ video: true, audio: false })
+      .getUserMedia({ video: true, audio: true })
       .then((stream) => {
         localStream.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
-        setLocalAudio(false);
+        setLocalAudio(true);
         setLocalVideo(true);
 
         if (data.from !== email) {
@@ -234,8 +266,6 @@ const Conference = () => {
     }
     remoteStreams.current[fromEmail].push(newStream);
 
-    forceUpdate();
-
     // Forward the new stream to all other peer connections
     Object.entries(peerConnections.current).forEach(([peerEmail, pc]) => {
       if (peerEmail !== fromEmail && peerEmail !== email) {
@@ -281,18 +311,6 @@ const Conference = () => {
   };
 
   const negotiateConnection = (peerConnection, toPeer, streamOf) => {
-    //if (peerStates.current[toPeer] !== "stable") {
-    //  console.log(
-    //    `Peer ${toPeer} is not in stable state. Current state:`,
-    //    peerStates.current[toPeer],
-    //  );
-    //  setTimeout(
-    //    () => negotiateConnection(peerConnection, toPeer, streamOf),
-    //    1000,
-    //  );
-    //  return;
-    //}
-
     peerConnection
       .createOffer()
       .then((offer) => peerConnection.setLocalDescription(offer))
@@ -329,13 +347,6 @@ const Conference = () => {
     }
 
     const pc = peerConnections.current[data.from];
-
-    //if (peerStates.current[data.from] !== "stable") {
-    //  console.log(
-    //    `Cannot handle offer. Peer ${data.from} is not in stable state.`,
-    //  );
-    //  return;
-    //}
 
     pc.setRemoteDescription(new RTCSessionDescription(data.offer))
       .then(() => pc.createAnswer())
@@ -374,39 +385,174 @@ const Conference = () => {
   const handleIceCandidate = (data) => {
     console.log("Received ICE candidate:", data);
     const pc = peerConnections.current[data.from];
-    //if (pc) {
-    //  pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((error) =>
-    //    console.error("Error adding ICE candidate:", error),
-    //  );
-    //}
+    if (pc) {
+      pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch((error) =>
+        console.error("Error adding ICE candidate:", error),
+      );
+    }
   };
 
-  // Force update function
-  const [, updateState] = useState();
-  const forceUpdate = useCallback(() => updateState({}), []);
+  const getGridClassName = () => {
+    const streamCount = remoteStreamsList.length;
+
+    if (streamCount <= 1) return "grid-cols-1";
+    if (streamCount === 2) return "grid-cols-1 md:grid-cols-2";
+    if (streamCount <= 4) return "grid-cols-2";
+    if (streamCount <= 6) return "grid-cols-2 md:grid-cols-3";
+    return "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+  };
+
+  const toggleVideoFit = (streamId) => {
+    setVideoFitStates((prev) => ({
+      ...prev,
+      [streamId]: !prev[streamId],
+    }));
+  };
+
+  const handleMute = () => {
+    setLocalAudio(!localaudio);
+    localStream.current
+      ?.getAudioTracks()
+      .forEach((track) => (track.enabled = !localaudio));
+  };
+
+  const handleCameraToggle = () => {
+    setLocalVideo(!localvideo);
+    localStream.current
+      ?.getVideoTracks()
+      .forEach((track) => (track.enabled = !localvideo));
+  };
+
+  const handleLeave = () => {
+    // Clean up streams before navigating
+    if (localStream.current) {
+      localStream.current.getTracks().forEach((track) => track.stop());
+    }
+    Object.values(peerConnections.current).forEach((pc) => pc.close());
+    window.close();
+  };
+
+  // Handle video metadata loaded to detect orientation
+  const handleVideoMetadata = (event, streamId) => {
+    const video = event.target;
+    const isPortrait = video.videoHeight > video.videoWidth;
+    setVideoFitStates((prev) => ({
+      ...prev,
+      [streamId]: isPortrait, // Default to contain for portrait videos
+    }));
+  };
 
   return (
-    <div>
-      <h2>Conference: {conferenceId}</h2>
-      <div>
-        <video ref={localVideoRef} autoPlay playsInline muted />
-      </div>
-      <div id="remote-videos-container">
-        {Object.entries(remoteStreams.current).map(([userEmail, streams]) =>
-          streams.map((stream, index) => (
-            <div key={`${userEmail}-${index}`}>
-              <video
-                autoPlay
-                playsInline
-                ref={(el) => {
-                  if (el) el.srcObject = stream;
-                }}
-                style={{ width: "200px", margin: "10px" }}
-              />
-              <p>{userEmail}</p>
+    <div className="relative min-h-screen bg-gray-900 p-4">
+      {/* Main video grid */}
+      <div
+        className={`grid ${getGridClassName()} gap-4 p-2 mb-20`}
+        style={{ minHeight: "calc(100vh - 8rem)" }}
+      >
+        {remoteStreamsList.map(({ id, userEmail, stream }) => (
+          <div
+            key={id}
+            className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden shadow-lg"
+          >
+            <video
+              autoPlay
+              playsInline
+              ref={(el) => {
+                if (el && el.srcObject !== stream) {
+                  el.srcObject = stream;
+                }
+              }}
+              onLoadedMetadata={(e) => handleVideoMetadata(e, id)}
+              className={`w-full h-full ${
+                videoFitStates[id] ? "object-contain" : "object-cover"
+              }`}
+            />
+            <div className="absolute top-2 right-2 z-10">
+              <button
+                onClick={() => toggleVideoFit(id)}
+                className="p-1.5 rounded-lg bg-gray-900/50 hover:bg-gray-900/70 transition-colors duration-200"
+              >
+                {videoFitStates[id] ? (
+                  <Maximize2 className="w-4 h-4 text-white" />
+                ) : (
+                  <Minimize2 className="w-4 h-4 text-white" />
+                )}
+              </button>
             </div>
-          )),
-        )}
+            <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+              <p className="text-white text-sm font-medium px-2">{userEmail}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Local video preview */}
+      <div className="absolute bottom-24 right-4 w-48 h-36 md:w-56 md:h-40 bg-gray-800 rounded-lg overflow-hidden shadow-lg border-2 border-gray-700">
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+          onLoadedMetadata={(e) => handleVideoMetadata(e, "local")}
+        />
+        <div className="absolute top-2 right-2">
+          <button
+            onClick={() => toggleVideoFit("local")}
+            className="p-1.5 rounded-lg bg-gray-900/50 hover:bg-gray-900/70 transition-colors duration-200"
+          >
+            {videoFitStates["local"] ? (
+              <Maximize2 className="w-4 h-4 text-white" />
+            ) : (
+              <Minimize2 className="w-4 h-4 text-white" />
+            )}
+          </button>
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+          <p className="text-white text-sm font-medium px-2">You ({email})</p>
+        </div>
+      </div>
+
+      {/* Control bar */}
+      <div className="fixed bottom-0 left-0 right-0 h-20 bg-gray-800 border-t border-gray-700">
+        <div className="max-w-3xl mx-auto h-full flex items-center justify-center space-x-4">
+          <button
+            onClick={handleMute}
+            className={`p-4 rounded-full ${
+              localaudio
+                ? "bg-gray-700 hover:bg-gray-600"
+                : "bg-red-600 hover:bg-red-700"
+            } transition-colors duration-200`}
+          >
+            {localaudio ? (
+              <Mic className="w-6 h-6 text-white" />
+            ) : (
+              <MicOff className="w-6 h-6 text-white" />
+            )}
+          </button>
+
+          <button
+            onClick={handleCameraToggle}
+            className={`p-4 rounded-full ${
+              localvideo
+                ? "bg-gray-700 hover:bg-gray-600"
+                : "bg-red-600 hover:bg-red-700"
+            } transition-colors duration-200`}
+          >
+            {localvideo ? (
+              <Video className="w-6 h-6 text-white" />
+            ) : (
+              <VideoOff className="w-6 h-6 text-white" />
+            )}
+          </button>
+
+          <button
+            onClick={handleLeave}
+            className="p-4 rounded-full bg-red-600 hover:bg-red-700 transition-colors duration-200"
+          >
+            <PhoneOff className="w-6 h-6 text-white" />
+          </button>
+        </div>
       </div>
     </div>
   );
