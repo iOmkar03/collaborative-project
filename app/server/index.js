@@ -5,6 +5,7 @@ const cors = require("cors");
 const connectDB = require("./db/connections.js");
 const userRouter = require("./routes/users.js");
 const conferenceRouter = require("./routes/conference.js");
+const ipfsRouter = require("./routes/ipfs.js");
 
 const app = express();
 const port = 5000;
@@ -30,6 +31,7 @@ async function startServer() {
     // Routes
     app.use("/users", userRouter);
     app.use("/conference", conferenceRouter);
+    app.use("/ipfs", ipfsRouter);
 
     // Create HTTPS server
     https.createServer(httpsOptions, app).listen(port, "0.0.0.0", () => {

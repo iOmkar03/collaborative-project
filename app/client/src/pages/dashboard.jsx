@@ -2,11 +2,11 @@ import React from "react";
 import Navbar from "../components/navbar";
 import Addjoin from "../components/addjoin";
 
-const dashboard = () => {
+const dashboard = ({baseip}) => {
     return (
-        <div className="min-h-[80vh]">
+        <div className="min-h-[80vh] ">
             <Navbar/>
-            <Addjoin/>
+            <Addjoin baseip={baseip}/>
         </div>
     )
 }

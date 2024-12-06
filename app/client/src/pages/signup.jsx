@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-const Signup = () => {
+const Signup = ({baseip}) => {
  //const backend ="https://192.168.132.109:5000";
-  const backend = "https://192.168.29.232:5000";
+  //const backend = "https://192.168.33.109:5000";
+  const backend = baseip+":5000";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();

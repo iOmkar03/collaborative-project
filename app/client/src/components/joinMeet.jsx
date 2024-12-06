@@ -4,10 +4,11 @@ import { useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
-const JoinMeet = ({ onHandleJoin }) => {
+const JoinMeet = ({ onHandleJoin, baseip }) => {
   const navigate = useNavigate();
- //const backend ="https://192.168.132.109:5000";
-  const backend = "https://192.168.29.232:5000";
+  //const backend ="https://192.168.33.109:5000";
+  //const backend = "https://192.168.29.232:5000";
+  const backend = baseip + ":5000";
   const [consferances, setConsferances] = useState([]);
   useEffect(() => {
     getConferences();
@@ -22,6 +23,8 @@ const JoinMeet = ({ onHandleJoin }) => {
       });
       //console.log(conferencesData.data.conferences);
       //sorting the conferences based on date
+      //log the token
+      console.log(localStorage.getItem("token"));
 
       const Obtainedconferences = conferencesData.data.conferences;
       //console.log(Obtainedconferences);
@@ -48,6 +51,18 @@ const JoinMeet = ({ onHandleJoin }) => {
     }
   };
 
+  const addfileSelected = async (e) => {
+    //console.log("add file selected");
+    try {
+      e.preventDefault();
+      const selectedConference = e.target.id;
+      console.log(selectedConference);
+      window.open(`/files/${selectedConference}`, "_blank");
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 backdrop-blur-sm">
       <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
@@ -59,14 +74,25 @@ const JoinMeet = ({ onHandleJoin }) => {
         </button>
         <div className="flex flex-col gap-4">
           {consferances.map((conference, index) => (
-            <button
+            <div
               key={conference.conferenceId}
-              id={conference.conferenceId}
-              className="bg-blue-500 text-white font-bold py-2 rounded-lg"
-              onClick={JoinSelected}
+              className="flex justify-between items-center gap-4"
             >
-              {conference.conferenceName}
-            </button>
+              <button
+                id={conference.conferenceId}
+                className="flex-grow bg-blue-500 text-white font-bold py-2 px-4 rounded-lg"
+                onClick={JoinSelected}
+              >
+                {conference.conferenceName}
+              </button>
+              <button
+                id={conference.conferenceId}
+                className="bg-gray-200 text-blue-500 font-bold py-2 px-4 rounded-lg"
+                onClick={addfileSelected}
+              >
+                📁
+              </button>
+            </div>
           ))}
         </div>
       </div>

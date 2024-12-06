@@ -11,9 +11,13 @@ import {
   Maximize2,
 } from "lucide-react";
 
-const Conference = () => {
-  const backend = "https://192.168.29.232:5000";
-  const wsbackend = "https://192.168.29.232:3001";
+const Conference = ({baseip}) => {
+  //const backend = "https://192.168.29.232:5000";
+  //const wsbackend = "https://192.168.29.232:3001";
+//const backend ="https://192.168.33.109:5000";
+//const wsbackend ="https://192.168.33.109:3001"
+  const backend = baseip+":5000";
+  const wsbackend = baseip+":3001";
   const navigate = useNavigate();
   const { conferenceId } = useParams();
   const [conferenceSize, setConferenceSize] = useState(0);

@@ -4,16 +4,25 @@ import Signin from "./pages/Signin";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/dashboard";
 import Conference from "./pages/conference11";
-
+import IpfsFiles from "./pages/ipfsFiles";
 const App = () => {
+  const baseip = "https://192.168.23.109";
   return (
     <>
       <Router>
         <Routes>
-          <Route path="/signin" element={<Signin />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/" element={<Dashboard />} />
-          <Route path="conference/:conferenceId" element={<Conference />} />
+          //pass ip as props to all the components
+          <Route path="/signin" element={<Signin baseip={baseip} />} />
+          <Route path="/signup" element={<Signup baseip={baseip} />} />
+          <Route path="/" element={<Dashboard baseip={baseip} />} />
+          <Route
+            path="/conference/:conferenceId"
+            element={<Conference baseip={baseip} />}
+          />
+          <Route
+            path="/files/:conferenceId"
+            element={<IpfsFiles baseip={baseip} />}
+          />
         </Routes>
       </Router>
     </>

@@ -39,8 +39,18 @@ const conferenceSchema=mongoose.Schema({
     
       type:String,
       required:true  
-  }]
+  }],
   //I will add the rest things later
+  files:[{
+    name:{
+      type:String,
+      required:false
+    },
+    url:{
+      type:String,
+      required:false
+    }
+  }],
 })
 
 const User=mongoose.model("User",userSchema);
