@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import {logActionFrontend } from "./../utils/logging.js"
 
 const JoinMeet = ({ onHandleJoin, baseip }) => {
   const navigate = useNavigate();
@@ -43,6 +44,10 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
       e.preventDefault();
       const selectedConference = e.target.id;
       //console.log(selectedConference);
+      //log the log action 
+       logActionFrontend(selectedConference, "join");
+
+
 
       //navigate(`/conference/${selectedConference}`);
       window.open(`/conference/${selectedConference}`, "_blank");

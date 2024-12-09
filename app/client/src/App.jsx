@@ -6,7 +6,7 @@ import Dashboard from "./pages/dashboard";
 import Conference from "./pages/conference11";
 import IpfsFiles from "./pages/ipfsFiles";
 const App = () => {
-  const baseip = "https://192.168.23.109";
+  const baseip = "https://192.168.140.109";
   return (
     <>
       <Router>
