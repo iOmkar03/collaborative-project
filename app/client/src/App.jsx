@@ -5,6 +5,7 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/dashboard";
 import Conference from "./pages/conference11";
 import IpfsFiles from "./pages/ipfsFiles";
+import Logs from "./pages/logs";
 const App = () => {
   const baseip = "https://192.168.140.109";
   return (
@@ -23,6 +24,7 @@ const App = () => {
             path="/files/:conferenceId"
             element={<IpfsFiles baseip={baseip} />}
           />
+          <Route path="logs/:conferenceId" element={<Logs baseip={baseip} />} />
         </Routes>
       </Router>
     </>

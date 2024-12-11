@@ -29,6 +29,7 @@ router.post("/create", verifyUser, async (req, res) => {
     }
     res.status(200).json({
       message: "Meet Created",
+      meetId: meetId
     });
   } catch (error) {
     console.log(error);
@@ -84,5 +85,39 @@ router.get("/access", verifyUser, async (req, res) => {
     });
   }
 });
+
+router.post("/log", verifyUser, async (req, res) => {
+  try {
+    const { meetingId, action, by, link, timestamp } = req.body;
+    const conference = await Conference.findOne({ _id: meetingId });
+    conference.logs.push({
+      action: action,
+      by: by,
+      link: link,
+      timestamp: timestamp,
+    });
+    await conference.save();
+    res.status(200).json({
+      message: "Logged",
+    });
+  } catch (error) {
+    console.log(error);
+  }
+});
+
+router.get("/log", verifyUser, async (req, res) => {
+  try {
+    const meetingId = req.headers.meetingid;
+    const conference = await Conference.findOne({ _id: meetingId });
+    const logs = conference.logs;
+    console.log(logs);
+    res.status(200).json({
+      logs: logs,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+}
+);
 
 module.exports = router;

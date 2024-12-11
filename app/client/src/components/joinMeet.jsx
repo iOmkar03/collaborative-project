@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import {logActionFrontend } from "./../utils/logging.js"
+import { logActionFrontend } from "./../utils/logging.js";
 
 const JoinMeet = ({ onHandleJoin, baseip }) => {
   const navigate = useNavigate();
@@ -44,10 +44,8 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
       e.preventDefault();
       const selectedConference = e.target.id;
       //console.log(selectedConference);
-      //log the log action 
-       logActionFrontend(selectedConference, "join");
-
-
+      //log the log action
+      logActionFrontend(selectedConference, "join", backend);
 
       //navigate(`/conference/${selectedConference}`);
       window.open(`/conference/${selectedConference}`, "_blank");
@@ -63,6 +61,17 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
       const selectedConference = e.target.id;
       console.log(selectedConference);
       window.open(`/files/${selectedConference}`, "_blank");
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const displaylogs = async (e) => {
+    try {
+      e.preventDefault();
+      const selectedConference = e.target.id;
+      console.log(selectedConference);
+      window.open(`/logs/${selectedConference}`, "_blank");
     } catch (error) {
       console.log(error);
     }
@@ -96,6 +105,13 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
                 onClick={addfileSelected}
               >
                 📁
+              </button>
+              <button
+                id={conference.conferenceId}
+                className="bg-gray-200 text-blue-500 font-bold py-2 px-4 rounded-lg"
+                onClick={displaylogs}
+              >
+                🪵
               </button>
             </div>
           ))}

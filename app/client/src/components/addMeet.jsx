@@ -1,10 +1,11 @@
 import React from "react";
 import { useState } from "react";
 import axios from "axios";
-const AddMeet = ({ onHandleAdd,baseip }) => {
- //const backend ="https://192.168.33.109:5000";
+import { logActionFrontend } from "./../utils/logging.js";
+const AddMeet = ({ onHandleAdd, baseip }) => {
+  //const backend ="https://192.168.33.109:5000";
   //const backend = "https://192.168.29.232:5000";
-  const backend = baseip+":5000";
+  const backend = baseip + ":5000";
   const [meetName, setMeetName] = useState("");
   const [meetParticipants, setMeetParticipants] = useState([]);
   const [ParticipantToAdd, setParticipantToAdd] = useState("");
@@ -39,8 +40,11 @@ const AddMeet = ({ onHandleAdd,baseip }) => {
           },
         },
       );
+      console.log(createMeet.data.meetId);
+      logActionFrontend(createMeet.data.meetId, "Create", backend);
       alert("Meet Created");
     } catch (error) {
+      console.log(error);
       alert("Error in creating meet");
     }
     onHandleAdd();
