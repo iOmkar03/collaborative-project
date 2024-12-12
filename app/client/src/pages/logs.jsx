@@ -4,7 +4,8 @@ import { useParams } from "react-router-dom";
 import axios from "axios";
 
 const Logs = ({ baseip }) => {
-  const backend = baseip + ":5000";
+  //const backend = baseip + ":5000";
+  const backend=import.meta.env.VITE_BACKEND;
   const { conferenceId } = useParams();
   const meetingId = conferenceId;
   const [loading, setLoading] = useState(true);

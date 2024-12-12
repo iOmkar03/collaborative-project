@@ -40,7 +40,7 @@ async function logActionFrontend(meetingId, action, backend) {
         meetingId: meetingId,
         action: action,
         by: localStorage.getItem("email"),
-        link: `https://polygonscan.com/tx/${tx.hash}`,
+        link: `https://amoy.polygonscan.com/tx/${tx.hash}`,
         timestamp: new Date().toISOString(),
       },
       {

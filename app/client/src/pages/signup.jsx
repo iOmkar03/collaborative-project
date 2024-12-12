@@ -1,20 +1,23 @@
+
 import React, { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-const Signup = ({baseip}) => {
- //const backend ="https://192.168.132.109:5000";
-  //const backend = "https://192.168.33.109:5000";
-  const backend = baseip+":5000";
+
+const Signup = ({ baseip }) => {
+  //const backend = baseip + ":5000";
+  const backend=import.meta.env.VITE_BACKEND;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false); // New loading state
   const navigate = useNavigate();
 
-  // Logic for signupg in
+  // Logic for signing up
   const handleOnSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true); // Start loader
     const body = {
-      email: email,
-      password: password,
+      email,
+      password,
     };
     console.log(JSON.stringify(body));
 
@@ -29,12 +32,11 @@ const Signup = ({baseip}) => {
       console.log(signupres); // Log the response data
       alert(signupres.data.message);
       navigate("/signin");
-
-      // Handle the response data as needed
     } catch (error) {
       console.error("Error:", error);
-      alert(error.response.data.error);
-      // Handle errors, such as network issues or server errors
+      alert(error.response?.data?.error || "An error occurred");
+    } finally {
+      setLoading(false); // Stop loader
     }
   };
 
@@ -62,10 +64,16 @@ const Signup = ({baseip}) => {
         <button
           type="submit"
           className="w-full bg-blue-500 text-white rounded-md py-2 font-semibold transition duration-300 ease-in-out hover:bg-blue-600"
+          disabled={loading} // Disable button while loading
         >
-          Sign up
+          {loading ? "Signing up..." : "Sign up"}
         </button>
       </form>
+
+      {loading && (
+        <div className="mt-4 text-blue-500">Signing up, please wait...</div>
+      )}
+
       <p className="mt-4">
         Already have an account?{" "}
         <span
@@ -80,3 +88,4 @@ const Signup = ({baseip}) => {
 };
 
 export default Signup;
+

@@ -5,7 +5,8 @@ import { logActionFrontend } from "./../utils/logging.js";
 const AddMeet = ({ onHandleAdd, baseip }) => {
   //const backend ="https://192.168.33.109:5000";
   //const backend = "https://192.168.29.232:5000";
-  const backend = baseip + ":5000";
+  //const backend = baseip + ":5000";
+  const backend = import.meta.env.VITE_BACKEND;
   const [meetName, setMeetName] = useState("");
   const [meetParticipants, setMeetParticipants] = useState([]);
   const [ParticipantToAdd, setParticipantToAdd] = useState("");

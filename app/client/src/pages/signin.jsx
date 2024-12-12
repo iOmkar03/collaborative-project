@@ -2,17 +2,18 @@ import axios from "axios";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const Signin = ({baseip}) => {
-  //const backend ="https://192.168.132.109:5000";
-  //const backend = "https://192.168.33.109:5000";
-  const backend = baseip+":5000";
+const Signin = ({ baseip }) => {
+  //const backend = baseip + ":5000";
+  const backend=import.meta.env.VITE_BACKEND;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false); 
   const navigate = useNavigate();
 
-  // Logic for signing in
+
   const handleOnSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true); 
     const body = {
       email,
       password,
@@ -27,14 +28,16 @@ const Signin = ({baseip}) => {
         data: JSON.stringify(body),
       });
 
-      //store the token in local storage
+      // Store the token in local storage
       localStorage.setItem("token", signinres.data.token);
       localStorage.setItem("email", email);
       navigate("/");
-      //redirect to the dashboard page
+      // Redirect to the dashboard page
     } catch (error) {
       console.error("Error:", error);
-      alert(error.response.data.error);
+      alert(error.response?.data?.error || "An error occurred");
+    } finally {
+      setLoading(false); // Stop loader
     }
   };
 
@@ -62,10 +65,16 @@ const Signin = ({baseip}) => {
         <button
           type="submit"
           className="w-full bg-blue-500 text-white rounded-md py-2 font-semibold transition duration-300 ease-in-out hover:bg-blue-600"
+          disabled={loading} // Disable button while loading
         >
-          Sign in
+          {loading ? "Signing in..." : "Sign in"}
         </button>
       </form>
+
+      {loading && (
+        <div className="mt-4 text-blue-500">Signing in, please wait...</div>
+      )}
+
       <p className="mt-4">
         Don't have an account?{" "}
         <span

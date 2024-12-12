@@ -3,10 +3,12 @@ import axios from "axios";
 import { useParams } from "react-router-dom";
 import { useEffect } from "react";
 import UploadToIpfs from "./../components/uploadToIpfs.jsx";
+import {logActionFrontend} from "./../utils/logging.js";
 
 const IpfsFiles = ({ baseip }) => {
   const conferenceId = useParams().conferenceId;
-  const backend = baseip + ":5000";
+  //const backend = baseip + ":5000";
+  const backend = import.meta.env.VITE_BACKEND;
   const [conferenceData, setConferenceData] = useState([]);
   const [uploadclicked, setUploadClicked] = useState(false);
 
@@ -36,6 +38,11 @@ const IpfsFiles = ({ baseip }) => {
       fetchConferenceData();
     }
   };
+
+  const handleFileOpen = async (e) => {
+    console.log("file opened:"+e.target.href);
+    logActionFrontend(conferenceId, "File opened:"+e.target.href, backend);
+  }
 
   return (
     <div className="flex flex-col gap-6 p-4 bg-blue-50 min-h-screen">
@@ -70,6 +77,8 @@ const IpfsFiles = ({ baseip }) => {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 underline hover:text-blue-800"
+                  onClick={handleFileOpen}
+                  
                 >
                   Open
                 </a>

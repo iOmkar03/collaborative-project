@@ -10,14 +10,17 @@ import {
   Minimize2,
   Maximize2,
 } from "lucide-react";
+import {logActionFrontend} from "./../utils/logging.js";
 
 const Conference = ({baseip}) => {
   //const backend = "https://192.168.29.232:5000";
   //const wsbackend = "https://192.168.29.232:3001";
 //const backend ="https://192.168.33.109:5000";
 //const wsbackend ="https://192.168.33.109:3001"
-  const backend = baseip+":5000";
-  const wsbackend = baseip+":3001";
+  //const backend = baseip+":5000";
+  //const wsbackend = baseip+":3001";
+  const backend = import.meta.env.VITE_BACKEND;
+  const wsbackend = import.meta.env.VITE_WSBACKEND;
   const navigate = useNavigate();
   const { conferenceId } = useParams();
   const [conferenceSize, setConferenceSize] = useState(0);
@@ -439,13 +442,31 @@ const Conference = ({baseip}) => {
       .forEach((track) => (track.enabled = !localvideo));
   };
 
-  const handleLeave = () => {
+  const handleLeave =async () => {
     // Clean up streams before navigating
     if (localStream.current) {
       localStream.current.getTracks().forEach((track) => track.stop());
     }
     Object.values(peerConnections.current).forEach((pc) => pc.close());
-    window.close();
+   
+    //close the mic and camera 
+    setLocalAudio(false);
+    setLocalVideo(false);
+
+      window.open("/", "_blank");
+ alert("This window will be closed in few seconds,pls do not close it manually"); 
+ await logActionFrontend(conferenceId, "left", backend);
+
+    //give allert saying this window will be closed in 10 sec dont give an ok options
+     
+
+
+    //open home tab in new window 
+  
+    setTimeout(() => {
+ window.close();
+        }, 30000);
+   
   };
 
   // Handle video metadata loaded to detect orientation

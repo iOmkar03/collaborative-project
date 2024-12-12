@@ -9,7 +9,8 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
   const navigate = useNavigate();
   //const backend ="https://192.168.33.109:5000";
   //const backend = "https://192.168.29.232:5000";
-  const backend = baseip + ":5000";
+  //const backend = baseip + ":5000";
+  const backend =import.meta.env.VITE_BACKEND;
   const [consferances, setConsferances] = useState([]);
   useEffect(() => {
     getConferences();
@@ -60,6 +61,7 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
       e.preventDefault();
       const selectedConference = e.target.id;
       console.log(selectedConference);
+      logActionFrontend(selectedConference, "files requested", backend);
       window.open(`/files/${selectedConference}`, "_blank");
     } catch (error) {
       console.log(error);
@@ -71,6 +73,7 @@ const JoinMeet = ({ onHandleJoin, baseip }) => {
       e.preventDefault();
       const selectedConference = e.target.id;
       console.log(selectedConference);
+      logActionFrontend(selectedConference, "logs accessed", backend);
       window.open(`/logs/${selectedConference}`, "_blank");
     } catch (error) {
       console.log(error);

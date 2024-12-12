@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import {logActionFrontend} from "./../utils/logging.js";
 
 const UploadToIpfs = ({
   conferenceId,
@@ -53,6 +54,7 @@ const UploadToIpfs = ({
         console.log("File successfully saved to DB");
         fetchConferenceData(); // Update conference data after upload
         handleUploadClick(); // Close the form
+        logActionFrontend(conferenceId, "File uploaded:"+fileName, backend);
       }
     } catch (error) {
       console.error("Error uploading file:", error);
